@@ -1,0 +1,18 @@
+#%Module1.0#####################################################################
+##
+## OpenROAD modulefile
+##
+##
+proc ModulesHelp { } {
+  global version modroot
+
+  puts stderr "\n\tThis module configures OpenROAD-pdn\n"
+}
+
+module-whatis "loads OpenROAD"
+
+set modroot       [file normalize [file dirname $ModulesCurrentModulefile ]/..]
+
+prepend-path            PATH             $modroot/bin:$modroot/scripts
+prepend-path            MANPATH          $modroot/share/man
+prepend-path -delim { } TCLLIBPATH       $modroot/scripts
