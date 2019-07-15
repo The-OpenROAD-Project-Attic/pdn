@@ -7,7 +7,6 @@ This utility aims to simplify the process of adding a power grid into a floorpla
 This package contains the following subdirectories
 * src/ containing source code and executables to run power grid insertion
 * doc/ detailed documentation and examples
-* test/ sample PDN.cfg files for test designs
 
 To use the src/scripts directory must be added to the PATH environment variable, and to the TCLLIBPATH environment variable (a space delimited list of directories)
 
