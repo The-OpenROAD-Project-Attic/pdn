@@ -78,7 +78,6 @@ namespace eval ::pdn {
         }
         close $ch
 
-        set macro_boundaries {}
         foreach instance [dict keys $instances] {
             set macro_name [dict get $instances $instance macro]
             set width  [expr [dict get $macros $macro_name width] * $dbu]
@@ -89,25 +88,23 @@ namespace eval ::pdn {
 
             set orient [dict get $instances $instance orient]    
             if {$orient == "N" || $orient == "FN" || $orient == "S" || $orient == "FS"} { 
-                set urx [expr $llx + $width]
-                set ury [expr $lly + $height]
+                set urx [expr round($llx + $width)]
+                set ury [expr round($lly + $height)]
             } elseif {$orient == "W" || $orient == "FW" || $orient == "E" || $orient == "FE"} { 
-                set urx [expr $llx + $height]
-                set ury [expr $lly + $width]
+                set urx [expr round($llx + $height)]
+                set ury [expr round($lly + $width)]
             }
 
-            dict set instances $instance macro_boundary [lmap x [list $llx $lly $urx $ury] {expr $x * 1.0 / $dbu}]
+            dict set instances $instance macro_boundary [list $llx $lly $urx $ury]
 
             set halo [dict get $instances $instance halo]
-            set llx [expr $llx - [lindex $halo 0]]
-            set lly [expr $lly - [lindex $halo 1]]
-            set urx [expr $urx + [lindex $halo 2]]
-            set ury [expr $ury + [lindex $halo 3]]
+            set llx [expr round($llx - [lindex $halo 0])]
+            set lly [expr round($lly - [lindex $halo 1])]
+            set urx [expr round($urx + [lindex $halo 2])]
+            set ury [expr round($ury + [lindex $halo 3])]
 
-            dict set instances $instance halo_boundary [lmap x [list $llx $lly $urx $ury] {expr $x * 1.0 / $dbu}]
+            dict set instances $instance halo_boundary [list $llx $lly $urx $ury]
         }
-
-        return $macro_boundaries
     }
 
     proc read_def_components {ch macros} {

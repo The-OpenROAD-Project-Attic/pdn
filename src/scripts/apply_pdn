@@ -8,11 +8,7 @@ package require pdn
 # Input = Macro-packed DEF (currently from innovus)
 # Output = Def with PDN
 
-set ::start_time [clock clicks -milliseconds]
-
 pdn init [lindex $argv 0]
-
-puts "Total walltime till PDN setup = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
 
 puts "##Power Delivery Network Generator: Generating PDN DEF"
 set ::start_time [clock clicks -milliseconds]

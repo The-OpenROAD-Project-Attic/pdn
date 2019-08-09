@@ -1,5 +1,7 @@
 namespace eval ::pdn {
-    variable defOut
+    variable defOut stdout
+    variable def_via_tech {}
+    variable physical_viarules {}
     
     proc open_def {file_name} {
         variable defOut
@@ -9,6 +11,7 @@ namespace eval ::pdn {
     proc close_def {} {
         variable defOut
         close $defOut
+        set defOut stdout
     }
     
     proc def_out {args} {
@@ -52,34 +55,47 @@ namespace eval ::pdn {
         def_out "DIEAREA ( [expr round($die_area_llx)] [expr round($die_area_lly)] ) ( [expr round($die_area_urx)] [expr round($die_area_ury)] ) ;"
 
         ##### Generating via rules
-        generate_viarules
+        write_via_rules
     }
     
+    # Data structure for a rule is a dictionary of the following form:
+    # name VIA1_RULE_1 rule VIA1_RULE cutsize {200 200} cutspacing {260 260} rowcol {1 4} enclosure {140 80 140 80} layers {M1 VIA1 M2}
+    # all values expected to be in DEF units
+    proc write_via_rules {} {
+        variable physical_viarules
+        
+        pdn def_out ""
+        pdn def_out ""
+        pdn def_out "VIAS [dict size $physical_viarules] ;\n"
+        dict for {name rule} $physical_viarules {
+            pdn def_out "- $name"
+            pdn def_out " + VIARULE [dict get $rule rule]"
+            pdn def_out " + CUTSIZE [dict get $rule cutsize]"
+            pdn def_out " + LAYERS [dict get $rule layers]"
+            pdn def_out " + CUTSPACING [dict get $rule cutspacing]"
+            pdn def_out " + ENCLOSURE [dict get $rule enclosure]"
+            pdn def_out " + ROWCOL [dict get $rule rowcol]"
+            pdn def_out " ;"
+        }
+        pdn def_out "END VIAS"
+        pdn def_out ""
+    }
+
     proc write_vias {net_name} {
-        foreach via $::vias {
+        variable logical_viarules
+        variable physical_viarules
+        variable vias
+        
+        foreach via $vias {
             if {[dict get $via net_name] == $net_name} {
-                set connect [dict get $via connections]
-                set i1 [dict get $connect layer1]
-                set i2 [dict get $connect layer2]
-                set viarules [dict get $connect rules]
-                
-                set intersections [dict get $connect intersections]
-
-                set layer1 [dict get $connect layer1]
-                regexp {(.*)_PIN} [dict get $connect layer1] - layer1 
-
-                set layer2 [dict get $connect layer2]
-                set i1 [lsearch $::met_layer_list $layer1]
-                set i2 [lsearch $::met_layer_list $layer2]
-                if {$i1 == -1} {puts "Layer1 [dict get $connect layer1], Layer2 $layer2"; exit -1}
-                if {$i2 == -1} {puts "Layer1 [dict get $connect layer1], Layer2 $layer2"; exit -1}
 	        # For each layer between l1 and l2, add vias at the intersection
-	        for {set i $i1} {$i < $i2} {incr i} {
-		    set lay [lindex $::met_layer_list $i]
-		    set rule [lindex $viarules $i]
-		    foreach loc $intersections {
-		        def_out "    NEW $lay 0 + SHAPE STRIPE ( [expr round([lindex $loc 0])] [expr round([lindex $loc 1])] ) $rule"
-		    }
+                foreach via_inst [dict get $via connections] {
+                    set via_name [dict get $via_inst name]
+                    set x        [dict get $via_inst x]
+                    set y        [dict get $via_inst y]
+                    set lay      [dict get $via_inst lower_layer]
+                    regexp {(.*)_PIN} $lay - lay
+                    def_out "    NEW $lay 0 + SHAPE STRIPE ( $x $y ) $via_name"
 	        }
             }
         }
