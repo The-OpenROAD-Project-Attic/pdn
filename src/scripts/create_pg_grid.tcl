@@ -291,45 +291,69 @@ namespace eval ::pdn {
 
     }
 
-    proc get_instance_specification {instance} {
+    proc select_instance_specification {instance} {
         variable design_data
         variable instances
 
-        foreach specification [dict get $design_data grid macro] {
-            if {![dict exists $specification blockage]} {
-                dict set specification blockage {}
-            }
-            if {[dict exists $specification instance]} {
-                if {[dict get $specification instance] == $instance} {
-                    dict set specification area [dict get $instances $instance macro_boundary]
-                    return $specification
-                }
-            }
-        }
+        set macro_specifications [dict get $design_data grid macro]
         
-        foreach specification [dict get $design_data grid macro] {
-            if {![dict exists $specification blockage]} {
-                dict set specification blockage {}
-            }
-            if {[dict exists $specification macro]} {
-                if {[dict get $instances $instance macro] == [dict get $specification macro]} {
-                    dict set specification area [dict get $instances $instance macro_boundary]
-                    return $specification
-                }
-            }
-        }
-
-        foreach specification [dict get $design_data grid macro] {
-            if {![dict exists $specification blockage]} {
-                dict set specification blockage {}
-            }
-            if {![dict exists $specification instance] && ![dict exists $specification macro]} {
-                dict set specification area [dict get $instances $instance macro_boundary]
+        # If there is a specifcation that matches this instance name, use that
+        foreach specification [lmap spec $macro_specifications {expr {[dict exists $spec instance] ? $spec : [break]}}] {
+            if {[dict get $specification instance] == $instance} {
                 return $specification
             }
         }
+        
+        # If there is a specification that matches this macro name, use that
+        set instance_macro [dict get $instances $instance macro]
+
+        set macro_specs [lmap spec $macro_specifications {expr {[dict exists $spec macro] && [dict get $spec macro] == $instance_macro ? $spec : [break]}}]
+        set oriented_macro_specs [lmap spec $macro_specs  {expr {[dict exists $spec orient] ? $spec : [break]}}]
+
+        # If there are orientation based specifcations for this macro, use the appropriate one if available
+        foreach specification $oriented_macro_specs {
+            if {[lsearch [dict get $specification orient] [dict get $instances $instance orient]] != -1} {
+                return $specification
+            }
+        }
+        
+        # There should only be one macro specific spec that doesnt have an orientation qualifier
+        set nonoriented_macro_specs [lmap spec $macro_specs  {expr {![dict exists $spec orient] ? $spec : [break]}}]
+        if {[llength $nonoriented_macro_specs] > 0} {
+            return [lindex $nonoriented_macro_specs 0]
+        }
+
+        # Other wise, use a strategy that specifies neither instance nor macro
+        set generic_specs [lmap spec $macro_specifications {expr {(![dict exists $spec macro] && ![dict exists $spec instance]) ? $spec : [break]}}]
+        set oriented_generic_specs [lmap spec $generic_specs  {expr {[dict exists $spec orient] ? $spec : [break]}}]
+
+        # If there are orientation based specifcations, use the appropriate one if available
+        foreach specification $oriented_generic_specs {
+            if {[lsearch [dict get $specification orient] [dict get $instances $instance orient]] != -1} {
+                return $specification
+            }
+        }
+
+        # There should only be one macro specific spec that doesnt have an orientation qualifier
+        set nonoriented_generic_specs [lmap spec $oriented_generic_specs  {expr {![dict exists $spec orient] ? $spec : [break]}}]
+        if {[llength $nonoriented_generic_specs] > 0} {
+            return [lindex $nonoriented_generic_specs 0]
+        }
+
         puts "Error: no matching grid specification found for $instance"
         exit -1
+    }
+    proc get_instance_specification {instance} {
+        variable instances
+
+        set specification [select_instance_specification $instance]
+
+        if {![dict exists $specification blockage]} {
+            dict set specification blockage {}
+        }
+        dict set specification area [dict get $instances $instance macro_boundary]
+        
+        return $specification
     }
     
     proc power_grid {} {
