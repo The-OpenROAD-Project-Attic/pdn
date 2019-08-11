@@ -3,7 +3,7 @@
 exec tclsh "$0" ${1+"$@"}
 
 package require Tcl 8.6
-package require pdn
+package require pdn 0.2.0
 
 # Input = Macro-packed DEF (currently from innovus)
 # Output = Def with PDN
