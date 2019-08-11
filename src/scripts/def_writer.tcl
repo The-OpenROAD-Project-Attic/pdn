@@ -202,6 +202,8 @@ namespace eval ::pdn {
 
     #proc to write special nets in the output def file, for each layer and each domains, 
     proc write_def {lay tag} {
+        variable widths
+
         set dir [get_dir $lay]
         
 	    if {$dir == "hor"} {
@@ -212,18 +214,18 @@ namespace eval ::pdn {
                             if {$l1 == $l3} {continue}
 			    if {$lay == $::rails_mlayer} {
 				    if {$::seg_count == 1 } {
-					    def_out "    $lay [expr round($::widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( $l3 * )"
+					    def_out "    $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( $l3 * )"
 					    set ::seg_count 2
 				    } else {
-					    def_out "    NEW $lay [expr round($::widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( $l3 * )"
+					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( $l3 * )"
 					    set ::seg_count 2
 				    }
 			    } else {
 				    if {$::seg_count == 1 } {
-					    def_out "    $lay [expr round($::widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( $l3 * )"
+					    def_out "    $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( $l3 * )"
 					    set ::seg_count 2
 				    } else {
-					    def_out "    NEW $lay [expr round($::widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( $l3 * )"
+					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( $l3 * )"
 					    set ::seg_count 2
 				    }
 			    }
@@ -238,18 +240,18 @@ namespace eval ::pdn {
                             if {$l2 == $l3} {continue}
 			    if {$lay == $::rails_mlayer} {
 				    if {$::seg_count == 1 } {
-					    def_out "    $lay [expr round($::widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( * $l3 )"
+					    def_out "    $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( * $l3 )"
 					    set ::seg_count 2
 				    } else {
-					    def_out "    NEW $lay [expr round($::widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( * $l3 )"	
+					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( * $l3 )"	
 					    set ::seg_count 2
 				    }
 			    } else {
 				    if {$::seg_count == 1 } {
-					    def_out "    $lay [expr round($::widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( * $l3 )"
+					    def_out "    $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( * $l3 )"
 					    set ::seg_count 2
 				    } else {
-					    def_out "    NEW $lay [expr round($::widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( * $l3 )"
+					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( * $l3 )"
 					    set ::seg_count 2
 				    }
 			    }

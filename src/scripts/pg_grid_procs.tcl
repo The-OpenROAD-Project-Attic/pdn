@@ -233,9 +233,9 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     set intersections ""
     #check if layer pair is orthogonal, case 1
     set layer1 $l1
-    if {[lsearch [dict get $grid_data layers] $layer1] != -1} {
+    if {[dict exists $grid_data layers $layer1]} {
         set layer1_direction [get_dir $layer1]
-        set layer1_width [lindex [dict get $grid_data widths] [lsearch [dict get $grid_data layers] $layer1]]
+        set layer1_width [dict get $grid_data layers $layer1 width]
         set layer1_width [expr round($layer1_width * $::def_units)]
     } elseif {[regexp {(.*)_PIN_(hor|ver)} $l1 - layer1 layer1_direction]} {
         #
@@ -244,11 +244,11 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     }
     
     set layer2 $l2
-    if {[lsearch [dict get $grid_data layers] $layer2] != -1} {
-        set layer2_width [lindex [dict get $grid_data widths] [lsearch [dict get $grid_data layers] $layer2]]
+    if {[dict exists $grid_data layers $layer2]} {
+        set layer2_width [dict get $grid_data layers $layer2 width]
         set layer2_width [expr round($layer2_width * $::def_units)]
-    } elseif {[lsearch [dict get $default_grid_data layers] $layer2] != -1} {
-        set layer2_width [lindex [dict get $default_grid_data widths] [lsearch [dict get $default_grid_data layers] $layer2]]
+    } elseif {[dict exists $default_grid_data layers $layer2]} {
+        set layer2_width [dict get $default_grid_data layers $layer2 width]
         set layer2_width [expr round($layer2_width * $::def_units)]
     } else {
         puts "No width information available for layer $layer2"
@@ -354,7 +354,9 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
         }
     } else { 
 	#Check if stripes have orthogonal intersections. If not, exit
-	puts "ERROR: Adding vias between same direction layers is not supported yet. EXITING....."
+	puts "ERROR: Adding vias between same direction layers is not supported yet."
+        puts "Layer: $l1, Direction: $layer1_direction"
+        puts "Layer: $l2, Direction: [get_dir $l2]"
 	exit
     }
 
@@ -386,23 +388,28 @@ proc generate_lower_metal_followpin_rails {tag area} {
 
 # proc for creating pdn mesh for upper metal layers
 proc generate_upper_metal_mesh_stripes {tag layer area} {
+    variable widths
+    variable pitches
+    variable loffset
+    variable boffset
+
 	if {[get_dir $layer] == "hor"} {
-		set offset [expr [lindex $area 1] + $::boffset($layer)]
+		set offset [expr [lindex $area 1] + $boffset($layer)]
 		if {$tag != $::stripes_start_with} { ;#If not starting from bottom with this net, 
-			set offset [expr {$offset + ($::pitches($layer) / 2)}]
+			set offset [expr {$offset + ($pitches($layer) / 2)}]
 		}
-		for {set y $offset} {$y < [expr {[lindex $area 3] - $::widths($layer)}]} {set y [expr {$::pitches($layer) + $y}]} {
+		for {set y $offset} {$y < [expr {[lindex $area 3] - $widths($layer)}]} {set y [expr {$pitches($layer) + $y}]} {
 			lappend ::stripe_locs($layer,$tag) "[lindex $area 0] $y [lindex $area 2]"
 			lappend ::orig_stripe_locs($layer,$tag) "[lindex $area 0] $y [lindex $area 2]"
 		
 		}
 	} elseif {[get_dir $layer] == "ver"} {
-		set offset [expr [lindex $area 0] + $::loffset($layer)]
+		set offset [expr [lindex $area 0] + $loffset($layer)]
 
 		if {$tag != $::stripes_start_with} { ;#If not starting from bottom with this net, 
-			set offset [expr {$offset + ($::pitches($layer) / 2)}]
+			set offset [expr {$offset + ($pitches($layer) / 2)}]
 		}
-		for {set x $offset} {$x < [expr {[lindex $area 2] - $::widths($layer)}]} {set x [expr {$::pitches($layer) + $x}]} {
+		for {set x $offset} {$x < [expr {[lindex $area 2] - $widths($layer)}]} {set x [expr {$pitches($layer) + $x}]} {
 			lappend ::stripe_locs($layer,$tag) "$x [lindex $area 1] [lindex $area 3]"
 			lappend ::orig_stripe_locs($layer,$tag) "$x [lindex $area 1] [lindex $area 3]"
 		}
@@ -431,6 +438,8 @@ proc generate_metal_with_blockage {layer area tag b1 b2 b3 b4} {
 
 # sub proc called from previous proc
 proc location_stripe_blockage {loc1 loc2 loc3 lay area tag b1 b2 b3 b4} {
+    variable widths
+
         set area_llx [lindex $area 0]
         set area_lly [lindex $area 1]
         set area_urx [lindex $area 2]
@@ -440,9 +449,9 @@ proc location_stripe_blockage {loc1 loc2 loc3 lay area tag b1 b2 b3 b4} {
 		##Check if stripe is passing through blockage
 		##puts "HORIZONTAL BLOCKAGE "
 		set x1 $loc1
-		set y1 [expr max($loc2 - $::widths($lay)/2, [lindex $area 1])]
+		set y1 [expr max($loc2 - $widths($lay)/2, [lindex $area 1])]
 		set x2 $loc3
-		set y2 [expr min($y1 +  $::widths($lay),[lindex $area 3])]
+		set y2 [expr min($y1 +  $widths($lay),[lindex $area 3])]
                 #puts "segment:  [format {%9.1f %9.1f} $loc1 $loc3]"              
                 #puts "blockage: [format {%9.1f %9.1f} $b1 $b3]"
 		if {  ($y1 >= $b2) && ($y2 <= $b4) && ( ($x1 <= $b3 && $x2 >= $b3) || ($x1 <= $b1 && $x2 >= $b1)  || ($x1 <= $b1 && $x2 >= $b3) || ($x1 <= $b3 && $x2 >= $b1) )  } {
@@ -473,9 +482,9 @@ proc location_stripe_blockage {loc1 loc2 loc3 lay area tag b1 b2 b3 b4} {
 
 	if {[get_dir $lay] == "ver"} {
 		##Check if veritcal stripe is passing through blockage, same strategy as above
-		set x1 [expr max($loc1 -  $::widths($lay)/2, [lindex $area 0])]
+		set x1 [expr max($loc1 -  $widths($lay)/2, [lindex $area 0])]
 		set y1 $loc2
-		set x2 [expr min($loc1 +  $::widths($lay)/2, [lindex $area 2])]
+		set x2 [expr min($loc1 +  $widths($lay)/2, [lindex $area 2])]
 		set y2 $loc3
 
 		if {!($x2 <= $b1 || $x1 >= $b3)} {
@@ -512,7 +521,7 @@ proc generate_stripes_vias {tag net_name grid_data} {
         set blockage [dict get $grid_data blockage]
 
 	##puts -nonewline "Adding stripes for $net_name ..."
-	foreach lay [dict get $grid_data layers] {
+	foreach lay [dict keys [dict get $grid_data layers]] {
 
 	    if {$lay == $::rails_mlayer} {
 	        #Std. cell rails

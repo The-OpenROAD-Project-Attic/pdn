@@ -29,6 +29,10 @@ namespace eval ::pdn {
     variable design_data {}
     variable default_grid_data {}
     variable def_output
+    variable widths
+    variable pitches
+    variable loffset
+    variable boffset
     
     ## procedure for file existence check, returns 0 if file does not exist or file exists, but empty
     proc -s {filename} {
@@ -263,18 +267,20 @@ namespace eval ::pdn {
     
     proc add_grid {grid_data} {
         variable design_data
-
+        variable widths
+        variable pitches
+        variable loffset
+        variable boffset
+        
         ##### Creating maps for directions, widths and pitches
         set def_units [dict get $design_data config def_units]
         set area [dict get $grid_data area]
 
-        set idx 0
-        foreach lay [dict get $grid_data layers] { 
-	    set ::widths($lay)    [expr round([lindex [dict get $grid_data widths]  $idx] * $def_units)] 
-	    set ::pitches($lay)   [expr round([lindex [dict get $grid_data pitches] $idx] * $def_units)]
-	    set ::loffset($lay)   [expr round([lindex [dict get $grid_data loffset] $idx] * $def_units)]
-	    set ::boffset($lay)   [expr round([lindex [dict get $grid_data boffset] $idx] * $def_units)]
-	    incr idx
+        foreach lay [dict keys [dict get $grid_data layers]] { 
+	    set widths($lay)    [expr round([dict get $grid_data layers $lay width] * $def_units)] 
+	    set pitches($lay)   [expr round([dict get $grid_data layers $lay pitch] * $def_units)]
+	    set loffset($lay)   [expr round([dict get $grid_data layers $lay offset] * $def_units)]
+	    set boffset($lay)   [expr round([dict get $grid_data layers $lay offset] * $def_units)]
         }
 
         ## Power nets
