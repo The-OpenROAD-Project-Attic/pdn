@@ -482,12 +482,12 @@ proc location_stripe_blockage {loc1 loc2 loc3 lay area tag b1 b2 b3 b4} {
 
 	if {[get_dir $lay] == "ver"} {
 		##Check if veritcal stripe is passing through blockage, same strategy as above
-		set x1 [expr max($loc1 -  $widths($lay)/2, [lindex $area 0])]
+		set x1 $loc1 ;# [expr max($loc1 -  $widths($lay)/2, [lindex $area 0])]
 		set y1 $loc2
-		set x2 [expr min($loc1 +  $widths($lay)/2, [lindex $area 2])]
+		set x2 $loc1 ;# [expr min($loc1 +  $widths($lay)/2, [lindex $area 2])]
 		set y2 $loc3
 
-		if {!($x2 <= $b1 || $x1 >= $b3)} {
+		if {$x2 > $b1 && $x1 < $b3} {
 
 			if {$y1 <= $b2 && $y2 >= $b4} {	
 				##puts "CASE3 of blockage in between top and bottom edge of core, cut the stripe into two segments
