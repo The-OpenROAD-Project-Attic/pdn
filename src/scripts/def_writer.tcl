@@ -146,7 +146,9 @@ namespace eval ::pdn {
     }
 
     proc write_rows {} {
-        set stripes [concat $::stripe_locs($::rails_mlayer,POWER) $::stripe_locs($::rails_mlayer,GROUND)]
+        variable stripe_locs
+        
+        set stripes [concat $stripe_locs([get_rails_layer],POWER) $stripe_locs([get_rails_layer],GROUND)]
         set stripes [lmap x $stripes {expr {[lindex $x 0] == [lindex $x 2] ? [continue] : $x}}]
         set stripes [lsort -real -index 1 $stripes]
         set heights [lsort -unique -real [lmap x $stripes {lindex $x 1}]]
@@ -203,56 +205,58 @@ namespace eval ::pdn {
     #proc to write special nets in the output def file, for each layer and each domains, 
     proc write_def {lay tag} {
         variable widths
-
+        variable stripe_locs
+        variable seg_count
+        
         set dir [get_dir $lay]
         
 	    if {$dir == "hor"} {
-		    foreach l_str $::stripe_locs($lay,$tag) {
+		    foreach l_str $stripe_locs($lay,$tag) {
 			    set l1 [expr round([lindex $l_str 0])]
 			    set l2 [expr round([lindex $l_str 1])]
 			    set l3 [expr round([lindex $l_str 2])]
                             if {$l1 == $l3} {continue}
-			    if {$lay == $::rails_mlayer} {
-				    if {$::seg_count == 1 } {
+			    if {$lay == [get_rails_layer]} {
+				    if {$seg_count == 1 } {
 					    def_out "    $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( $l3 * )"
-					    set ::seg_count 2
+					    set seg_count 2
 				    } else {
 					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( $l3 * )"
-					    set ::seg_count 2
+					    set seg_count 2
 				    }
 			    } else {
-				    if {$::seg_count == 1 } {
+				    if {$seg_count == 1 } {
 					    def_out "    $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( $l3 * )"
-					    set ::seg_count 2
+					    set seg_count 2
 				    } else {
 					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( $l3 * )"
-					    set ::seg_count 2
+					    set seg_count 2
 				    }
 			    }
 
 		    }
 
 	    } elseif {$dir == "ver"} {
-		    foreach l_str $::stripe_locs($lay,$tag) {
+		    foreach l_str $stripe_locs($lay,$tag) {
 			    set l1 [expr round([lindex $l_str 0])]
 			    set l2 [expr round([lindex $l_str 1])]
 			    set l3 [expr round([lindex $l_str 2])]
                             if {$l2 == $l3} {continue}
-			    if {$lay == $::rails_mlayer} {
-				    if {$::seg_count == 1 } {
+			    if {$lay == [get_rails_layer]} {
+				    if {$seg_count == 1 } {
 					    def_out "    $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( * $l3 )"
-					    set ::seg_count 2
+					    set seg_count 2
 				    } else {
 					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( * $l3 )"	
-					    set ::seg_count 2
+					    set seg_count 2
 				    }
 			    } else {
-				    if {$::seg_count == 1 } {
+				    if {$seg_count == 1 } {
 					    def_out "    $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( * $l3 )"
-					    set ::seg_count 2
+					    set seg_count 2
 				    } else {
 					    def_out "    NEW $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( * $l3 )"
-					    set ::seg_count 2
+					    set seg_count 2
 				    }
 			    }
 		    }		
@@ -266,6 +270,7 @@ namespace eval ::pdn {
 
     proc output_def {} {
         variable design_data
+        variable seg_count
         
         #####
         # Start writing to the DEF file
@@ -287,7 +292,7 @@ namespace eval ::pdn {
             
             def_out -nonewline "  + ROUTED " 
 
-            set ::seg_count 1
+            set seg_count 1
             foreach lay $::met_layer_list {
                 write_def $lay $tag	
             }
@@ -304,7 +309,7 @@ namespace eval ::pdn {
             def_out ""
             def_out -nonewline "  + ROUTED " 
 
-            set ::seg_count 1
+            set seg_count 1
             foreach lay $::met_layer_list {
                 write_def $lay $tag	
             }

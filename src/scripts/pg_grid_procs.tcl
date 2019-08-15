@@ -15,6 +15,12 @@ namespace eval ::pdn {
         set idx [lsearch $::met_layer_list $layer_name]
         return [lindex $::met_layer_dir $idx]
     }
+    
+    proc get_rails_layer {} {
+        variable default_grid_data
+        
+        return [dict get $default_grid_data rails]
+    }
 
     proc convert_viarules_to_def_units {} {
         global via_tech
@@ -373,7 +379,7 @@ proc generate_lower_metal_followpin_rails {tag area} {
     variable stripe_locs
 
 	#Assumes horizontal stripes
-	set lay $::rails_mlayer
+	set lay [get_rails_layer]
 
 	if {$tag == $::rails_start_with} { ;#If starting from bottom with this net, 
 		set lly [lindex $area 1]
@@ -532,7 +538,7 @@ proc generate_stripes_vias {tag net_name grid_data} {
 	##puts -nonewline "Adding stripes for $net_name ..."
 	foreach lay [dict keys [dict get $grid_data layers]] {
 
-	    if {$lay == $::rails_mlayer} {
+	    if {$lay == [get_rails_layer]} {
 	        #Std. cell rails
 	        generate_lower_metal_followpin_rails $tag $area
 
@@ -541,7 +547,7 @@ proc generate_stripes_vias {tag net_name grid_data} {
 		        set b2 [lindex $blk1 1]
 		        set b3 [lindex $blk1 2]
 		        set b4 [lindex $blk1 3]
-		        generate_metal_with_blockage $::rails_mlayer $area $tag $b1 $b2 $b3 $b4
+		        generate_metal_with_blockage [get_rails_layer] $area $tag $b1 $b2 $b3 $b4
 	        }
 
             } else {

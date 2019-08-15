@@ -46,6 +46,7 @@ namespace eval ::pdn {
     }
     
     proc get_memory_instance_pg_pins {} {
+        variable orig_stripe_locs
         ########################################
         # Creating run.param file for PdnPinDumper
         #
@@ -148,7 +149,7 @@ namespace eval ::pdn {
             set xu [lindex $pin 2]
             set y  [expr ([lindex $pin 1] + [lindex $pin 3])/2]
             set width [expr [lindex $pin 3] - [lindex $pin 1]]
-            lappend ::orig_stripe_locs([lindex $pin 4]_PIN_hor,POWER) [list $xl $y $xu $width]
+            lappend orig_stripe_locs([lindex $pin 4]_PIN_hor,POWER) [list $xl $y $xu $width]
         }
 
         foreach pin $mem_pins_vdd_ver {
@@ -156,7 +157,7 @@ namespace eval ::pdn {
             set yl [lindex $pin 1]
             set yu [lindex $pin 3]
             set width [expr [lindex $pin 2] - [lindex $pin 0]]
-            lappend ::orig_stripe_locs([lindex $pin 4]_PIN_ver,POWER) [list $x $yl $yu $width]
+            lappend orig_stripe_locs([lindex $pin 4]_PIN_ver,POWER) [list $x $yl $yu $width]
         }
 
         foreach pin $mem_pins_vss_hor {
@@ -164,7 +165,7 @@ namespace eval ::pdn {
             set xu [lindex $pin 2]
             set y  [expr ([lindex $pin 1] + [lindex $pin 3])/2]
             set width [expr [lindex $pin 3] - [lindex $pin 1]]
-            lappend ::orig_stripe_locs([lindex $pin 4]_PIN_hor,GROUND) [list $xl $y $xu $width]
+            lappend orig_stripe_locs([lindex $pin 4]_PIN_hor,GROUND) [list $xl $y $xu $width]
         }
 
         foreach pin $mem_pins_vss_ver {
@@ -172,7 +173,7 @@ namespace eval ::pdn {
             set yl [lindex $pin 1]
             set yu [lindex $pin 3]
             set width [expr [lindex $pin 2] - [lindex $pin 0]]
-            lappend ::orig_stripe_locs([lindex $pin 4]_PIN_ver,GROUND) [list $x $yl $yu $width]
+            lappend orig_stripe_locs([lindex $pin 4]_PIN_ver,GROUND) [list $x $yl $yu $width]
         }
 
         puts "Total walltime till macro pin geometry creation = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
@@ -182,6 +183,8 @@ namespace eval ::pdn {
         variable design_data
         variable def_output
         variable vias
+        variable default_grid_data
+        variable stripe_locs
         
         set ::start_time [clock clicks -milliseconds]
 
@@ -203,13 +206,6 @@ namespace eval ::pdn {
         puts "Reading BEOL LEF and gathering information ..."
 
         puts " DONE \[Total elapsed walltime = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds\]"
-
-        ##puts -nonewline "Doing sanity checks, gathering information and creating DEF headers ..."
-        ##### Basic sanity checks to see if inputs are given correctly
-        if {[lsearch $::met_layer_list $::rails_mlayer] < 0} {
-	        puts "ERROR: Layer specified for std. cell rails not in list of layers. EXITING....."
-	        exit
-        }
 
         set vias {}
         if {[info vars ::halo] != ""} {
@@ -237,10 +233,8 @@ namespace eval ::pdn {
         ]
                    
         foreach lay $::met_layer_list { 
-	    set ::stripe_locs($lay,POWER) ""
-	    set ::stripe_locs($lay,GROUND) ""
-	    set ::stripe_locs_blk($lay,POWER) ""
-	    set ::stripe_locs_blk($lay,GROUND) ""	
+	    set stripe_locs($lay,POWER) ""
+	    set stripe_locs($lay,GROUND) ""
         }
 
         ########################################
@@ -249,6 +243,16 @@ namespace eval ::pdn {
         pdn read_macro_boundaries $::FpOutDef $::lef_files
 
         pdn get_memory_instance_pg_pins
+
+        if {$default_grid_data == {}} {
+            set default_grid_data [lindex [dict get $design_data grid stdcell] 0]
+        }
+
+        ##### Basic sanity checks to see if inputs are given correctly
+        if {[lsearch $::met_layer_list [get_rails_layer]] < 0} {
+	        puts "ERROR: Layer specified for std. cell rails not in list of layers. EXITING....."
+	        exit
+        }
 
         puts "Total walltime till PDN setup = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
 
