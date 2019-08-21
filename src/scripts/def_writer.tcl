@@ -114,17 +114,17 @@ namespace eval ::pdn {
 
         if {$start == $end} {return}
 	set site_width [expr {int(round($::site_width * $::def_units))}]
-	if {[expr { int($start) % $site_width}] == 0} {
+	if {[expr { int($start - ($::core_area_llx * $::def_units)) % $site_width}] == 0} {
 		set x $start
 
 	} else {
-		set offset [expr { int($start) % $site_width}]
+		set offset [expr { int($start - ($::core_area_llx * $::def_units)) % $site_width}]
 		set x [expr {$start + $site_width - $offset}]
 
 	}
 
 	set num  [expr {($end - $x)/$site_width}]
-        def_out "ROW ROW_$::row_index $::site_name $start $height [orientation $height] DO $num BY 1 STEP $site_width 0 ;"
+        def_out "ROW ROW_$::row_index $::site_name $x $height [orientation $height] DO $num BY 1 STEP $site_width 0 ;"
         
         incr ::row_index
     }
