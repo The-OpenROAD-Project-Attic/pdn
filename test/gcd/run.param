@@ -1,0 +1,10 @@
+lef:/projects/ssg/pj10000064_diphda/users/colhol01/openroad/alpha-release/flow/platforms/nangate45/NangateOpenCellLibrary.mod.lef
+def:floorplan.def
+guide:dummy.guide
+output:dummy.def
+macroList:macrocell.list
+threads:16
+cpxthreads:8
+verbose:2
+gap:0
+timeout:2400
