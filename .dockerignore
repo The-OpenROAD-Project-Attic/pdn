@@ -1,0 +1,10 @@
+.git
+Dockerfile
+.dockerignore
+.gitignore
+
+# from .gitignore file
+*.def
+*.lef
+*.lib
+*.v
