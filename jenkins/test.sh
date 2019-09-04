@@ -1,1 +1,1 @@
-docker run -v test:/test pdn bash -c "cd /test; make check"
+docker run -v $(pwd)/test:/test pdn bash -c "cd /test; make check"
