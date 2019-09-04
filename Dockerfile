@@ -35,7 +35,7 @@ COPY . /pdn
 RUN mkdir -p /pdn/src/PdnPinDumper/build
 WORKDIR /pdn/src/PdnPinDumper/build
 RUN cmake ..
-RUN make
+RUN make PdnPinDumper
 
 FROM centos:centos6 AS runner
 RUN yum update -y && yum install -y tcl-devel
