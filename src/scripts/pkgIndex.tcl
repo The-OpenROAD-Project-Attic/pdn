@@ -9,6 +9,9 @@
 # full path name of this file's directory.
 
 proc source_pdn {dir} {
+    if {[package vcompare [package present Tcl] 8.6] == -1} {
+        source [file join $dir tcl8p5.tcl]
+    }
     source [file join $dir pg_grid_procs.tcl]
     source [file join $dir gen_blockage.tcl]
     source [file join $dir def_writer.tcl]
