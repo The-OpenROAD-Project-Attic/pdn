@@ -41,7 +41,8 @@ FROM centos:centos6 AS runner
 RUN yum update -y && yum install -y tcl-devel
 COPY --from=builder /pdn/src/PdnPinDumper/build/PdnPinDumper /build/PdnPinDumper
 COPY --from=builder /pdn/src/scripts /build/scripts/
-ENV PATH=/build:/build/scripts/:$PATH
+ENV PATH=/build:/build/scripts/:$PATH \
+    TCLLIBPATH="/build/scripts $TCLLIBPATH"
 RUN useradd -ms /bin/bash openroad
 USER openroad
 WORKDIR /home/openroad
