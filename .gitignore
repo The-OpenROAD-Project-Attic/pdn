@@ -2,5 +2,5 @@
 *.lef
 *.lib
 *.v
-
+src/PdnPinDumper/build
 
