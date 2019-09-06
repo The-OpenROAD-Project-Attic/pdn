@@ -43,7 +43,7 @@ COPY --from=builder /pdn/src/PdnPinDumper/build/PdnPinDumper /build/PdnPinDumper
 COPY --from=builder /pdn/src/scripts /build/scripts/
 ENV PATH=/build:/build/scripts/:$PATH \
     TCLLIBPATH="/build/scripts $TCLLIBPATH"
-RUN useradd -ms /bin/bash openroad
-USER openroad
+# RUN useradd -ms /bin/bash openroad
+# USER openroad
 COPY --from=builder /pdn/test /build/test/
 WORKDIR /build/test
