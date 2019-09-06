@@ -379,8 +379,8 @@ namespace eval ::pdn {
         puts "exec which apply_pdn -> [exec which apply_pdn]"
         puts "exec which def_gen -> [exec which def_gen]"
         if {[file exists /build/scripts]} {
-            puts "ls /build/scripts"
-            puts [exec ls /build/scripts]
+            puts "ls -l /build/scripts"
+            puts [exec ls -l /build/scripts]
         }
         puts "**** END INFO ****"
 
