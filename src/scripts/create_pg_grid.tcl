@@ -375,6 +375,13 @@ namespace eval ::pdn {
 
         set def_units [dict get $design_data config def_units]
         puts "****** INFO ******"
+        puts "PATH=$::env(PATH)"
+        puts "exec which apply_pdn -> [exec which apply_pdn]"
+        puts "exec which def_gen -> [exec which def_gen]"
+        if {[file exists /build/scripts]} {
+            puts "ls /build/scripts"
+            puts [exec ls /build/scripts]
+        }
         puts "**** END INFO ****"
 
         foreach specification [dict get $design_data grid stdcell] {
