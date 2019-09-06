@@ -45,4 +45,5 @@ ENV PATH=/build:/build/scripts/:$PATH \
     TCLLIBPATH="/build/scripts $TCLLIBPATH"
 RUN useradd -ms /bin/bash openroad
 USER openroad
-WORKDIR /home/openroad
+COPY --from=builder /pdn/test /build/test/
+WORKDIR /build/test

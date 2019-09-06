@@ -1,1 +1,1 @@
-docker run -v $(pwd)/test:/test pdn bash -c "cd /test; chmod u+rwx .; make check"
+docker run pdn bash -c "make check"
