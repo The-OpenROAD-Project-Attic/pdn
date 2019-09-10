@@ -37,13 +37,11 @@ WORKDIR /pdn/src/PdnPinDumper/build
 RUN cmake ..
 RUN make PdnPinDumper
 
-FROM centos:centos6 AS runner
-RUN yum update -y && yum install -y tcl-devel && yum install -y perl
+FROM ahosny/centos6-tcl8.6 AS runner
+RUN yum update -y && yum install -y perl
 COPY --from=builder /pdn/src/PdnPinDumper/build/PdnPinDumper /build/PdnPinDumper
 COPY --from=builder /pdn/src/scripts /build/scripts/
+COPY --from=builder /pdn/test /build/test/
 ENV PATH=/build:/build/scripts/:$PATH \
     TCLLIBPATH="/build/scripts $TCLLIBPATH"
-# RUN useradd -ms /bin/bash openroad
-# USER openroad
-COPY --from=builder /pdn/test /build/test/
 WORKDIR /build/test
