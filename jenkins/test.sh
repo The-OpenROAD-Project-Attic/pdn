@@ -1,1 +1,1 @@
-docker run -v $(pwd):/pdn ahosny/centos6-tcl8.6 bash -c "cd /pdn/test && make check"
+docker run -v $(pwd):/pdn openroad/pdn bash -c "cd /pdn/test && make check"

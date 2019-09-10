@@ -37,7 +37,7 @@ WORKDIR /pdn/src/PdnPinDumper/build
 RUN cmake ..
 RUN make PdnPinDumper
 
-FROM ahosny/centos6-tcl8.6 AS runner
+FROM openroad/centos6-tcl8.6 AS runner
 RUN yum update -y && yum install -y perl
 COPY --from=builder /pdn/src/PdnPinDumper/build/PdnPinDumper /build/PdnPinDumper
 COPY --from=builder /pdn/src/scripts /build/scripts/
