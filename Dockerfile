@@ -9,7 +9,7 @@ ENV CC=/opt/rh/devtoolset-8/root/usr/bin/gcc \
     PATH=/opt/rh/devtoolset-8/root/usr/bin:$PATH \
     LD_LIBRARY_PATH=/opt/rh/devtoolset-8/root/usr/lib64:/opt/rh/devtoolset-8/root/usr/lib:/opt/rh/devtoolset-8/root/usr/lib64/dyninst:/opt/rh/devtoolset-8/root/usr/lib/dyninst:/opt/rh/devtoolset-8/root/usr/lib64:/opt/rh/devtoolset-8/root/usr/lib:$LD_LIBRARY_PATH
 
-RUN yum install -y wget git pcre-devel tcl-devel tk-devel bison flex \
+RUN yum install -y wget git pcre-devel tcl-devel perl tk-devel bison flex \
                    python-devel libxml2-devel libxslt-devel zlib-static glibc-static
 
 RUN wget http://prdownloads.sourceforge.net/swig/swig-4.0.0.tar.gz && \
@@ -38,7 +38,7 @@ RUN cmake ..
 RUN make PdnPinDumper
 
 FROM centos:centos6 AS runner
-RUN yum update -y && yum install -y tcl-devel
+RUN yum update -y && yum install -y tcl-devel && yum install -y perl
 COPY --from=builder /pdn/src/PdnPinDumper/build/PdnPinDumper /build/PdnPinDumper
 COPY --from=builder /pdn/src/scripts /build/scripts/
 ENV PATH=/build:/build/scripts/:$PATH \
