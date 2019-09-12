@@ -19,7 +19,7 @@ pipeline {
         sh './jenkins/openroad-build.sh'
       }
     }
-    stage('OpenROAD Flow Test') {
+    stage('OpenROAD Test') {
       when {
         branch 'openroad-build'
       }
