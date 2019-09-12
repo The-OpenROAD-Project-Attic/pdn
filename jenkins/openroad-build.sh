@@ -3,7 +3,7 @@ echo "Building .."
 
 cd ../openroad-builds/pdn/
 git pull
-git submodule update --remote
+# git submodule update --remote
 cd module/pdn
 git checkout openroad-build
 git pull
