@@ -22,8 +22,8 @@ puts "Total walltime to generate PDN DEF = [expr {[expr {[clock clicks -millisec
 puts "Macro-packed input def is $FpOutDef"
 puts "##TASK 8 Final DEF generation with PDN : Stitching macro-packed DEF with SPECIAL NETS"
 
-exec def_gen $::FpOutDef [pdn get config def_output] $::design ${::design}_post_T8.def
-#eval $cmd
+set cmd "exec def_gen $::FpOutDef [pdn get config def_output] $::design ${::design}_post_T8.def"
+eval $cmd
 
 puts "Total walltime till final DEF stitching = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
 

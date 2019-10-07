@@ -2,7 +2,8 @@ namespace eval ::pdn {
     variable defOut stdout
     variable def_via_tech {}
     variable physical_viarules {}
-    
+    variable row_index 1
+
     proc open_def {file_name} {
         variable defOut
         set defOut [open $file_name w]
@@ -124,6 +125,8 @@ namespace eval ::pdn {
     }
         
     proc write_row {height start end} {
+        variable row_index
+
         set start  [expr int($start)]
         set height [expr int($height)]
         set end    [expr int($end)]
@@ -140,9 +143,9 @@ namespace eval ::pdn {
 	}
 
 	set num  [expr {($end - $x)/$site_width}]
-        def_out "ROW ROW_$::row_index $::site_name $x $height [orientation $height] DO $num BY 1 STEP $site_width 0 ;"
+        def_out "ROW ROW_$row_index $::site_name $x $height [orientation $height] DO $num BY 1 STEP $site_width 0 ;"
         
-        incr ::row_index
+        incr row_index
     }
 
     proc write_rows {} {
@@ -271,7 +274,7 @@ namespace eval ::pdn {
     proc output_def {} {
         variable design_data
         variable seg_count
-        
+        variable instances
         #####
         # Start writing to the DEF file
         open_def [dict get $design_data config def_output]
@@ -280,37 +283,43 @@ namespace eval ::pdn {
 
         ##### Generating the SPECIALNETS header
 
-        set size_of_pg_nets [expr {[llength $::power_nets] + [llength $::ground_nets]}]
+        set size_of_pg_nets [expr {[llength [dict get $design_data power_nets]] + [llength [dict get $design_data ground_nets]]}]
         def_out "\nSPECIALNETS $size_of_pg_nets ;"
-        foreach net_name $::power_nets {
+        foreach net_name [dict get $design_data power_nets] {
             set tag "POWER"
-            def_out -nonewline "- $net_name  ( * $net_name )"
-            foreach pin_name $::macro_power_pins {
-                def_out -nonewline " ( * $pin_name )"
+            def_out "- $net_name  ( * $net_name )"
+
+            dict for {inst_name instance} $instances {
+                foreach pin_name [get_macro_power_pins $inst_name] {
+                    def_out -nonewline " ( $inst_name $pin_name )"
+                }
+                def_out ""
             }
-            def_out ""
             
             def_out -nonewline "  + ROUTED " 
 
             set seg_count 1
-            foreach lay $::met_layer_list {
+            foreach lay [get_metal_layers] {
                 write_def $lay $tag	
             }
             write_vias $net_name
             def_out "  + USE $tag\n ;"
         }
 
-        foreach net_name $::ground_nets {
+        foreach net_name [dict get $design_data ground_nets] {
             set tag "GROUND"
-            def_out -nonewline "- $net_name  ( * $net_name )"
-            foreach pin_name $::macro_ground_pins {
-                def_out -nonewline " ( * $pin_name )"
+            def_out "- $net_name  ( * $net_name )"
+
+            dict for {inst_name instance} $instances {
+                foreach pin_name [get_macro_ground_pins $inst_name] {
+                    def_out -nonewline "  ( $inst_name $pin_name )"
+                }
+                def_out ""
             }
-            def_out ""
             def_out -nonewline "  + ROUTED " 
 
             set seg_count 1
-            foreach lay $::met_layer_list {
+            foreach lay [get_metal_layers] {
                 write_def $lay $tag	
             }
             write_vias $net_name
