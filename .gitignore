@@ -2,5 +2,9 @@
 *.lef
 *.lib
 *.v
+dummy.guide
+macrocell.list
+pin_dumper.log
+run.param
 src/PdnPinDumper/build
 
