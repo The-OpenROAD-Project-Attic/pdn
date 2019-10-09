@@ -35,8 +35,10 @@ e.g.
 
 For further information on the config file, and to review an example config see the following:
 
-* [PDN.md](PDN.md)
-* [example_PDN.cfg](example_PDN.cfg)
+* [PDN config help](PDN.md)
+* [Sample config - PDN.cfg](example_PDN.cfg)
+* [Sample technology config - nangate45.cfg](nangate45.cfg)
+* [Sample grid config - grid_strategy-M1-M4-M7.cfg](grid_strategy-M1-M4-M7.cfg)
 
 ## Assumptions and Limitations
 
@@ -44,5 +46,4 @@ Currently the following assumptions are made:
 
 1. The design is rectangular
 1. The input floorplan def file defines the size of the design, includes the placement of all macro blocks and IO pins
-1. The user must provide a function that will write out the VIAs that are required to connect the layers together. In order to get a DRC clean power grid, it is important that these VIA definitions are themselves DRC clean, and will cause no DRC violations when instantiated in the design.
 
