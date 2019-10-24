@@ -125,6 +125,7 @@ namespace eval ::pdn {
             set macro_name [lindex $line 2]
             if {[lsearch $macros $macro_name] != -1} {
                 set data {}
+                dict set data name [lindex $line 1]
                 if {[set idx [lsearch $line "FIXED"]] != -1} {
                     dict set data macro $macro_name
                     dict set data x [lindex $line [expr $idx + 2]]

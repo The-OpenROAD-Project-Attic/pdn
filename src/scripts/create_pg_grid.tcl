@@ -44,6 +44,20 @@ namespace eval ::pdn {
         
         return [dict get $design_data {*}$args]
     }
+    proc get_macro_power_pins {inst_name} {
+        set specification [select_instance_specification $inst_name]
+        if {[dict exists $specification power_pins]} {
+            return [dict get $specification power_pins]
+        }
+        return "VDDPE VDDCE"
+    }
+    proc get_macro_ground_pins {inst_name} {
+        set specification [select_instance_specification $inst_name]
+        if {[dict exists $specification ground_pins]} {
+            return [dict get $specification ground_pins]
+        }
+        return "VSSE"
+    }
     
     proc get_memory_instance_pg_pins {} {
         variable orig_stripe_locs
@@ -103,21 +117,14 @@ namespace eval ::pdn {
         set mem_pins_vss_hor {}
         set mem_pins_vss_ver {}
 
-        if {[info vars ::macro_power_pins] == ""} {
-             set ::macro_power_pins "VDDPE VDDCE"
-        }
-        if {[info vars ::macro_ground_pins] == ""} {
-            set ::macro_ground_pins "VSSE"
-        }
-        
         while {![eof $ch]} {
             set line [gets $ch]
             set line [regsub -all {[\(\)\-\,]} $line {}]
 
-            if {[regexp {^instName.*/([^/]*):} $line - pin_name]} {
-                if {[lsearch $::macro_power_pins $pin_name] != -1} {
+            if {[regexp {^instName:\s+(.*);\s+(.*)/([^/]*):} $line - inst_name macro_name pin_name]} {
+                if {[lsearch [get_macro_power_pins $inst_name] $pin_name] != -1} {
                     set net vdd
-                } elseif {[lsearch $::macro_ground_pins $pin_name] != -1} {
+                } elseif {[lsearch [get_macro_ground_pins $inst_name] $pin_name] != -1} {
                     set net vss
                 } else {
                     if {[info vars net] != ""} {
@@ -198,6 +205,16 @@ namespace eval ::pdn {
         puts "Design Name is $::design"
         set def_output "${::design}_pdn.def"
         
+        if {[info vars ::power_nets] == ""} {
+            set ::power_nets "VDD"
+        }
+        if {[info vars ::ground_nets] == ""} {
+            set ::ground_nets "VDD"
+        }
+
+        dict set design_data power_nets $::power_nets
+        dict set design_data ground_nets $::ground_nets
+
         # Sourcing user inputs file
         #
         set ::row_height [expr {$::def_units * $::row_height}]
@@ -207,6 +224,14 @@ namespace eval ::pdn {
 
         puts " DONE \[Total elapsed walltime = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds\]"
 
+        if {[info vars ::layers] != ""} {
+            foreach layer $::layers {
+                if {[dict exists $::layers $layer widthtable]} {
+                    dict set ::layers $layer widthtable [lmap x [dict get $::layers $layer widthtable] {expr $x * $::def_units}]
+                }
+            }
+            set_layer_info $::layers
+        }
         set vias {}
         if {[info vars ::halo] != ""} {
             if {[llength $::halo] == 1} {
@@ -232,7 +257,7 @@ namespace eval ::pdn {
             default_halo [lmap x $default_halo {expr $x * $::def_units}] \
         ]
                    
-        foreach lay $::met_layer_list { 
+        foreach lay [get_metal_layers] { 
 	    set stripe_locs($lay,POWER) ""
 	    set stripe_locs($lay,GROUND) ""
         }
@@ -249,7 +274,7 @@ namespace eval ::pdn {
         }
 
         ##### Basic sanity checks to see if inputs are given correctly
-        if {[lsearch $::met_layer_list [get_rails_layer]] < 0} {
+        if {[lsearch [get_metal_layers] [get_rails_layer]] < 0} {
 	        puts "ERROR: Layer specified for std. cell rails not in list of layers. EXITING....."
 	        exit
         }
@@ -288,13 +313,12 @@ namespace eval ::pdn {
         }
 
         ## Power nets
-        set ::row_index 1
-        foreach pwr_net $::power_nets {
+        foreach pwr_net [dict get $design_data power_nets] {
 	    set tag "POWER"
 	    generate_stripes_vias $tag $pwr_net $grid_data
         }
         ## Ground nets
-        foreach gnd_net $::ground_nets {
+        foreach gnd_net [dict get $design_data ground_nets] {
 	    set tag "GROUND"
 	    generate_stripes_vias $tag $gnd_net $grid_data
         }
@@ -366,6 +390,61 @@ namespace eval ::pdn {
         return $specification
     }
     
+    proc get_metal_layers {} {
+        return $::met_layer_list
+    }
+
+    proc get_instance_llx {instance} {
+        variable instances
+        return [lindex [dict get $instances $instance halo_boundary] 0]
+    }
+    
+    proc get_instance_lly {instance} {
+        variable instances
+        return [lindex [dict get $instances $instance halo_boundary] 1]
+    }
+    
+    proc get_instance_urx {instance} {
+        variable instances
+        return [lindex [dict get $instances $instance halo_boundary] 2]
+    }
+    
+    proc get_instance_ury {instance} {
+        variable instances
+        return [lindex [dict get $instances $instance halo_boundary] 3]
+    }
+    
+    proc get_macro_blockage_layers {instance} {
+        set specification [select_instance_specification $instance]
+        if {[dict exists $specification blockage]} {
+            return [dict get $specification blockage]
+        }
+        return [lrange [get_metal_layers] 0 3]
+    }
+    
+    proc print_strategy {type specification} {
+        puts "Type: $type"
+        if {[dict exists $specification rails]} {
+            puts "    Follow Pins Layer: [dict get $specification rails]"
+        }
+        if {[dict exists $specification instance]} {
+            puts "    Instance: [dict get $specification orient]"
+        }
+        if {[dict exists $specification macro]} {
+            puts "    Macro: [dict get $specification orient]"
+        }
+        if {[dict exists $specification orient]} {
+            puts "    Macro orientation: [dict get $specification orient]"
+        }
+        dict for {layer_name layer} [dict get $specification layers] {
+            puts "    Layer: $layer_name"
+            puts "        Width:  [dict get $layer width]"
+            puts "        Pitch:  [dict get $layer pitch]"
+            puts "        Offset: [dict get $layer offset]"
+        }
+        puts "    Connect: [dict get $specification connect]"
+    }
+    
     proc power_grid {} {
         variable design_data
         variable instances
@@ -375,17 +454,16 @@ namespace eval ::pdn {
 
         set def_units [dict get $design_data config def_units]
         puts "****** INFO ******"
-        puts "PATH=$::env(PATH)"
-        puts "exec which apply_pdn -> [exec which apply_pdn]"
-        puts "exec which def_gen -> [exec which def_gen]"
-        if {[file exists /build/scripts]} {
-            puts "ls -l /build/scripts"
-            puts [exec ls -l /build/scripts]
+        foreach specification [dict get $design_data grid stdcell] {
+            print_strategy stdcell $specification
+        }
+        foreach specification [dict get $design_data grid macro] {
+            print_strategy macro $specification
         }
         puts "**** END INFO ****"
 
         foreach specification [dict get $design_data grid stdcell] {
-            dict set specification blockage [get_macro_halo_boundaries]
+            dict set specification blockage [dict keys $instances]
             if {![dict exists $specification area]} {
                 dict set specification area [lmap x [dict get $design_data config core_area] {expr round($x * $::def_units)}]
             }

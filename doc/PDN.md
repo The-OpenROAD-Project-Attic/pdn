@@ -14,12 +14,6 @@ The ```apply_pdn``` command requires the following global variables to exist
 |  ```::design``` |  Name of the design |
 |  ```::def_units``` | Number of database unit that make 1 micron |
 | ```::FpOutDef``` | Name of the floorplan DEF containing macro and pin placement |
-| ```::flatLef``` | File containing technology and library cell data |
-| ```::macro_power_pins``` | List of names of power pins on macros |
-| ```::macro_ground_pins``` | List of names of ground pins on macros |
-| ```::site_name``` | Name of the stdcell site  |
-| ```::site_width``` | Width of the stdcell site |
-| ```::row_height``` | Height of a stdcell row |
 | ```::core_area_llx``` | Core area llx |
 | ```::core_area_lly``` | Core area lly |
 | ```::core_area_urx``` | Core area urx |
@@ -30,12 +24,20 @@ The ```apply_pdn``` command requires the following global variables to exist
 | ```::die_area_llx``` | Die area ury |
 | ```::power_nets``` | Name of the power net |
 | ```::ground_nets``` | Name of the ground net |
-| ```::macro_blockage_layer_list``` | List of metal layer names blocked by macros |
-| ```::met_layer_list``` | List of metal layer names - bottom to top |
-| ```::met_layer_dir``` | List of preferred direction for the layer names - bottom to top |
-| ```::rails_mlayer``` | Layer used as stdcell rail |
 | ```::rails_start_with``` | POWER\|GROUND |
 | ```::stripes_start_with``` | POWER\|GROUND |
+
+#### Technology configuration
+
+| Variable Name | Description |
+|:---|:---|
+| ```::lef_files``` | File containing technology and library cell data |
+| ```::site_name``` | Name of the stdcell site  |
+| ```::site_width``` | Width of the stdcell site |
+| ```::row_height``` | Height of a stdcell row |
+| ```::met_layer_list``` | List of metal layer names - bottom to top |
+| ```::met_layer_dir``` | List of preferred direction for the layer names - bottom to top |
+| ```::via_tech``` | List of VIARULES present in the technology LEF. Each viarule has 3 elements, lower, upper and cut. Entries for lower and upper define the layer name and enclosure settings. The cut entry specifies layer_name, size and spacing |
 
 ## Optional Global Variables
 
@@ -44,7 +46,7 @@ The ```apply_pdn``` command requires the following global variables to exist
 | ```::halo``` | Halo to apply around macros. Specify one, two or four values. If a HALO is defined in the floorplan DEF, then this will be ignored. |
 
 
-## Call TCL procedure
+## Power grid strategy definitions
 A set of power grid specifications are provided by calling the ```pdn specify_grid``` command. 
 At least one power grid specification must be defined.
 
@@ -58,77 +60,77 @@ Where specification is a list of key value pairs
 
 | Key | Description |
 |:---|:---|
-| ```layers``` | List of layers on which to draw stripes |
-| ```dir``` | List of directions of layers |
-| ```widths``` | List of width of stripes  |
-| ```pitches``` | List of pitches of stripes |
-| ```loffset``` | List of left hand offsets of stripes |
-| ```boffset``` | List of bottom offsets of stripes |
-| ```connect``` | List of connections to be made between layers |
-| ```vias``` | List of vias to use to connect layers - match ::met_layer_list |
-| ```instance``` |  |
-| ```macro``` |  |
+| ```layers``` | List of layers on which to draw stripes. Each layer will specify a value for width, pitch and offset |
+| ```rails``` | The layer which should be used to draw the horizontal stdcell rails |
+| ```connect``` | List of connections to be made between layers. Macro pin connections are on layer \<layer_name>_PIN_\<direction> |
 
-The lists for dir, widths, pitches, loffset, boffset must all be the same length as the list for layers
-such that the nth element in the list gives the values for the layer whose name is also nth in the
-list of layers
+Additionally, for macro grids
+| Key | Description |
+|:---|:---|
+| ```orient``` | If the orientation of the macro matches an entry in this list, then apply this grid specification
+| ```instance``` | If the instance name of the macro matches an entry in this list, then apply this grid specification  |
+| ```macro``` | If the macro name of the macro matches an entry in this list, then apply this grid specification |
+| ```power_pins``` | List of power pins on the macro to connect to the grid |
+| ```ground_pins``` | List of ground pins on the macro to connect to the grid |
+| ```blockages``` | Layers which are blocked by a macro using this grid specification |
 
-The key connect specifies two layers to be connected together where the stripes the same net of the first layer 
-overlaps with stripes of the second layer
+The key connect specifies two layers to be connected together where the stripes the same net of the first layer overlaps with stripes of the second layer
 
-Macro pins are extracted from the LEF/DEF and are specified on a layer called ```\<layer_name>_PIN_\<dir>```, where ```\<layer_name>```
-is the name of the layer as specified in ::met_layer_list, and '''\<dir>``` is hor to indicate horizontal pins in the floorplan and is 
-```ver``` to indicate that the pins are oriented vertically in the floorplan.
+Macro pins are extracted from the LEF/DEF and are specified on a layer called ```<layer_name>_PIN_<dir>```, where ```<layer_name>``` is the name of the layer as specified in ::met_layer_list, and ```<dir>``` is ```hor``` to indicate horizontal pins in the floorplan and is ```ver``` to indicate that the pins are oriented vertically in the floorplan.
 
-The key vias contains a list of vias to be used to connect to the next higher layer. The first element of the 
-list is for M1 to M2 VIAs, the second element for M2 to M3 vias etc. Hence, this list should be 1 element shorter
-than the list ::met_layer_list
-
-A separate grid is built for each macro. The list of macro specification sthat have been defined are searched to 
-find a specification with a matcing instance name key, failing that a macro specification with a matching macro name key, 
-or else the first specification with neither an instance or macro key is used.
+A separate grid is built for each macro. The list of macro specifications that have been defined are searched to find a specification with a matcing instance name key, failing that a macro specification with a matching macro name key, or else the first specification with neither an instance or macro key is used. Furthermore, if orient is specified, then the orientation of the macro must match one of the entries in the orient field
 
 ### Examples of grid specifications
 
 1. Stdcell grid specification
 ```TCL
 pdn specify_grid stdcell {
-    layers    "M1 M4 M7" 
-    dir       "hor ver hor" 
-    widths    "0.64 0.93 0.93" 
-    pitches   "2.40 40.0 40.0" 
-    loffset   "0 2 2" 
-    boffset   "0 2 2" 
-    connect   "{M1 M4} {M4 M7}" 
-    vias      "VIA1_RULE_1 VIA2_RULE_1 VIA3_RULE_1 VIA4_RULE_1 VIA5_RULE_264 VIA6_RULE_18 VIA7_RULE_18 VIA8_RULE_1"
+    rails metal1
+    layers {
+        metal1 {width 0.17 pitch  2.4 offset 0} 
+        metal4 {width 0.48 pitch 56.0 offset 2}
+        metal7 {width 1.40 pitch 40.0 offset 2}
+    }
+    connect {{metal1 metal4} {metal4 metal7}}
 }
 ```
-This specification adds a grid over the stdcell area, with an M1 horizontal followpin width of 0.64,connecting to 
-M4 vertical stripes of 0.93 every 40.0, connecting in turn to horizontal M7 stripes, also 0.93 wide and 40.0 pitch
+This specification adds a grid over the stdcell area, with an metal1 followpin width of 0.17,connecting to metal4 stripes of 0.48um every 56.0um, connecting in turn to metal7 stripes, also 1.40um wide and 40.0 pitch
 
 2. Macro grid specification
 ```TCL
 pdn specify_grid macro {
-    layers    "M6" 
-    dir       "ver"
-    widths    "0.93"
-    pitches   "40" 
-    loffset   2 
-    boffset   0 
-    connect   "{M4_PIN_hor M6} {M6 M7}"
-    vias      "VIA1_RULE_1 VIA2_RULE_1 VIA3_RULE_1 VIA4_RULE_293 VIA5_RULE_360 VIA6_RULE_21 VIA7_RULE_18 VIA8_RULE_1"
+    orient {N FN S FS}
+    power_pins "VDDPE VDDCE"
+    ground_pins "VSSE"
+    blockages "metal1 metal2 metal3 metal4"
+    layers {
+        metal5 {width 0.93 pitch 40.0 offset 2}
+        metal6 {width 0.93 pitch 40.0 offset 2}
+    } 
+    connect {{metal4_PIN_ver metal5} {metal5 metal6} {metal6 metal7}}
 }
 ```
 
-If this the only macro grid specification defined, then it will be applied over all the macros in the design.
+If this the only macro grid specification defined, then it will be applied over all the macros in the design that match one of the entries in the orient field.
 
-All horizontal M4 pins on the macros are connected to vertical M6, which is then connected to horizontal M7. In this way macros that
-have their pins oriented in non-preferred routing directions can still be connected up to the power grid.
+All vertical metal4 pins on the macros are connected to metal5, which is then connected to metal6, which is connected in turn to metal7.
 
-## Define TCL Procedure
-A function call generate_vias must be created that writes out a definition of VIAs that are referenced by the grid specfications, but do not already exist in the technology LEF.
+For macros that have their pins oriented in non-preferred routing direction the grid specification would be as follows.
 
-It is unlikely that the VIAs needed to connect the layers of the power grid will already exist in the technology LEF. The technology LEF provides a mechanism to create VIAs using VIARULES. VIAs referenced in the grid specifications that do not already exist in the technology file are must be created using available VIARULEs. 
+```TCL
+pdn specify_grid macro {
+    orient {E FE W FW}
+    power_pins "VDDPE VDDCE"
+    ground_pins "VSSE"
+    blockages "metal1 metal2 metal3 metal4"
+    layers {
+        metal6 {width 0.93 pitch 40.0 offset 2}
+    }
+    connect {{metal4_PIN_hor metal6} {metal6 metal7}}
+}
+```
 
-The function calls the ```pdn def_out``` function to write DEF for the required VIAs.
+Macros with orientations E, FE, W or FW will have their metal4 pins in the vertical (non-preferred) direction - this specification connects these pins directly to the metal6 layer, then on to metal7.
+
+In both of thees cases we have specified that the macrcos have power pins VDDPE and VDDCE, ground pins VSSE and create blockages in layers metal1 to metal4
 

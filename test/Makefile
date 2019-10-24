@@ -6,16 +6,16 @@ TESTS=\
 all: $(TESTS)
 
 clean.% : 
-	-@$(MAKE) -C $* clean BLOCK=$*
+	-@$(MAKE) -C $* clean 
 
 check.% : 
-	@$(MAKE) -C $* check BLOCK=$*
+	@$(MAKE) -C $* check 
 
 test.% : 
-	@$(MAKE) -C $* test BLOCK=$*
+	@$(MAKE) -C $* test 
 
 approve.% :
-	@$(MAKE) -C $* approve BLOCK=$*
+	@$(MAKE) -C $* approve 
 
 clean: $(foreach block,$(TESTS),clean.$(block))
 	echo "Clean complete"
@@ -24,4 +24,4 @@ check: $(foreach block,$(TESTS),check.$(block))
 	echo "Checks complete"
         
 $(TESTS) :
-	$(MAKE) -C $@ BLOCK=$@
+	$(MAKE) -C $@ 
