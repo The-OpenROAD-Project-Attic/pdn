@@ -291,9 +291,8 @@ namespace eval ::pdn {
 
             dict for {inst_name instance} $instances {
                 foreach pin_name [get_macro_power_pins $inst_name] {
-                    def_out -nonewline " ( $inst_name $pin_name )"
+                    def_out " ( $inst_name $pin_name )"
                 }
-                def_out ""
             }
             
             def_out -nonewline "  + ROUTED " 
@@ -312,9 +311,8 @@ namespace eval ::pdn {
 
             dict for {inst_name instance} $instances {
                 foreach pin_name [get_macro_ground_pins $inst_name] {
-                    def_out -nonewline "  ( $inst_name $pin_name )"
+                    def_out "  ( $inst_name $pin_name )"
                 }
-                def_out ""
             }
             def_out -nonewline "  + ROUTED " 
 
