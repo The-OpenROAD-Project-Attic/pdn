@@ -4,7 +4,8 @@ namespace eval ::pdn {
     variable vias {}
     variable stripe_locs
     variable orig_stripe_locs
-
+    variable layers {}
+    
 #This file contains procedures that are used for PDN generation
 
     proc get_dir {layer_name} {
@@ -58,21 +59,67 @@ namespace eval ::pdn {
         return [dict filter $def_via_tech script {rule_name rule} {expr {[dict get $rule lower layer] == $layer_name}}]
     }
     
+    proc set_layer_info {layer_info} {
+        variable layers
+        
+        set layers $layer_info
+    }
+    
+    proc get_layer_info {} {
+        variable layers 
+        
+        return $layers
+    }
+    
+    # Layers that have a widthtable will only support some width values, the widthtable defines the 
+    # set of widths that are allowed, or any width greater than or equal to the last value in the
+    # table
+    proc get_adjusted_width {layer width} {
+        set layers [get_layer_info]
+        
+        if {[dict exists $layers $layer] && [dict exists $layers $layer widthtable]} {
+            set widthtable [dict get $layers $layer widthtable]
+            if {[lsearch $widthtable $width] > 0} {
+                return $width
+            } elseif {$width > [lindex $widthtable end]} {
+                return $width
+            } else {
+                foreach value $widthtable {
+                    if {$value > $width} {
+                        return $value
+                    }
+                }
+            }
+        }
+        
+        return $width
+    }
+    
     # Given the via rule expressed in via_info, what is the via with the largest cut area that we can make
     proc get_via_option {lower_dir rule_name via_info x y width height} {
         set cut_width  [lindex [dict get $via_info cut size] 0]
         set cut_height [lindex [dict get $via_info cut size] 1]
 
+        # Adjust the width and height values to the next largest allowed value if necessary
+        set lower_width  [get_adjusted_width [dict get $via_info lower layer] $width]
+        set lower_height [get_adjusted_width [dict get $via_info lower layer] $height]
+        set upper_width  [get_adjusted_width [dict get $via_info upper layer] $width]
+        set upper_height [get_adjusted_width [dict get $via_info upper layer] $height]
+        
         set lower_enclosure [expr min([join [dict get $via_info lower enclosure] ","])]
         set upper_enclosure [expr min([join [dict get $via_info upper enclosure] ","])]
         set max_lower_enclosure [expr max([join [dict get $via_info lower enclosure] ","])]
         set max_upper_enclosure [expr max([join [dict get $via_info upper enclosure] ","])]
 
+if {$rule_name == "A4_Ax_RULE"} {
+    puts "[dict get $via_info lower layer] Width $width -> $lower_width, Height $height -> $lower_height"
+    puts "[dict get $via_info upper layer] Width $width -> $upper_width, Height $height -> $upper_height"
+}
         # What are the maximum number of rows and columns that we can fit in this space?
         set i 0
         set via_width_lower 0
         set via_width_upper 0
-        while {$via_width_lower < $width && $via_width_upper < $width} {
+        while {$via_width_lower < $lower_width && $via_width_upper < $upper_width} {
             incr i
             set xcut_pitch [lindex [dict get $via_info cut spacing] 0]
             set via_width_lower [expr $cut_width + $xcut_pitch * ($i - 1) + 2 * $lower_enclosure]
@@ -84,7 +131,7 @@ namespace eval ::pdn {
         set i 0
         set via_height_lower 0
         set via_height_upper 0
-        while {$via_height_lower < $height && $via_height_upper < $height} {
+        while {$via_height_lower < $lower_height && $via_height_upper < $upper_height} {
             incr i
             set ycut_pitch [lindex [dict get $via_info cut spacing] 1]
             set via_height_lower [expr $cut_height + $ycut_pitch * ($i - 1) + 2 * $lower_enclosure]
@@ -93,45 +140,70 @@ namespace eval ::pdn {
         set ycut_spacing [expr $ycut_pitch - $cut_height]
         set rows [expr $i - 1]
 
-	set enc_width  [expr ($width  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2]
-	set enc_height [expr ($height - ($cut_height  + $ycut_pitch * ($rows    - 1))) / 2]
+	set lower_enc_width  [expr round(($lower_width  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
+	set lower_enc_height [expr round(($lower_height - ($cut_height  + $ycut_pitch * ($rows    - 1))) / 2)]
+	set upper_enc_width  [expr round(($upper_width  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
+	set upper_enc_height [expr round(($upper_height - ($cut_height  + $ycut_pitch * ($rows    - 1))) / 2)]
 
+        # Adjust calculated via width values to ensure that an allowed size is generated
+        set lower_size_max_enclosure [get_adjusted_width [dict get $via_info lower layer] [expr round(($cut_width   + $xcut_pitch * ($columns - 1) + $max_lower_enclosure * 2))]]
+        set upper_size_max_enclosure [get_adjusted_width [dict get $via_info upper layer] [expr round(($cut_width   + $xcut_pitch * ($columns - 1) + $max_upper_enclosure * 2))]]
+        
+        set max_lower_enclosure [expr round(($lower_size_max_enclosure  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
+        set max_upper_enclosure [expr round(($upper_size_max_enclosure  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
+
+if {$rule_name == "A4_Ax_RULE"} {
+    puts "lower_enc_width  $lower_enc_width  round(($lower_width  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)"
+    puts "lower_enc_height $lower_enc_height "
+    puts "upper_enc_width  $upper_enc_width  "
+    puts "upper_enc_height $upper_enc_height "
+}
         # Use the largest value of enclosure in the direction of the layer
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {$lower_dir == "hor"} {
-            if {$enc_height < $max_lower_enclosure} {
-                set xBotEnc [expr max($max_lower_enclosure,$enc_width)]
+            if {$lower_enc_height < $max_lower_enclosure} {
+                set xBotEnc [expr max($max_lower_enclosure,$lower_enc_width)]
             } else {
-                set xBotEnc $enc_width
+                set xBotEnc $lower_enc_width
             }
-            set yBotEnc $enc_height
+            set yBotEnc $lower_enc_height
         } else {
-            set xBotEnc $enc_width
-            if {$enc_width < $max_lower_enclosure} {
-                set yBotEnc [expr max($max_lower_enclosure,$enc_height)]
+            set xBotEnc $lower_enc_width
+            if {$lower_enc_width < $max_lower_enclosure} {
+                set yBotEnc [expr max($max_lower_enclosure,$lower_enc_height)]
             } else {
-                set yBotEnc $enc_height
+                set yBotEnc $lower_enc_height
             }
         }
-        
+if {$rule_name == "A4_Ax_RULE"} {
+puts "$lower_dir"
+    puts "xBotEnc $xBotEnc"
+    puts "lower_enc_width  $lower_enc_width "
+}
         # Use the largest value of enclosure in the direction of the layer
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {[get_dir [dict get $via_info upper layer]] == "hor"} {
-            if {$enc_height < $max_upper_enclosure} {
-                set xTopEnc [expr max($max_upper_enclosure,$enc_width)]
+            if {$upper_enc_height < $max_upper_enclosure} {
+                set xTopEnc [expr max($max_upper_enclosure,$upper_enc_width)]
             } else {
-                set xTopEnc $enc_width
+                set xTopEnc $upper_enc_width
             }
-            set yTopEnc $enc_height
+            set yTopEnc $upper_enc_height
         } else {
-            set xTopEnc $enc_width
-            if {$enc_width < $max_upper_enclosure} {
-                set yTopEnc [expr max($max_upper_enclosure,$enc_height)]
+            set xTopEnc $upper_enc_width
+            if {$upper_enc_width < $max_upper_enclosure} {
+                set yTopEnc [expr max($max_upper_enclosure,$upper_enc_height)]
             } else {
-                set yTopEnc $enc_height
+                set yTopEnc $upper_enc_height
             }
         }
         
+if {$rule_name == "A4_Ax_RULE"} {
+    puts "xBotEnc $xBotEnc"
+    puts "yBotEnc $yBotEnc"
+    puts "xTopEnc $xTopEnc"
+    puts "yTopEnc $yTopEnc"
+}
         set rule [list \
             rule $rule_name \
             cutsize [dict get $via_info cut size] \

@@ -224,6 +224,14 @@ namespace eval ::pdn {
 
         puts " DONE \[Total elapsed walltime = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds\]"
 
+        if {[info vars ::layers] != ""} {
+            foreach layer $::layers {
+                if {[dict exists $::layers $layer widthtable]} {
+                    dict set ::layers $layer widthtable [lmap x [dict get $::layers $layer widthtable] {expr $x * $::def_units}]
+                }
+            }
+            set_layer_info $::layers
+        }
         set vias {}
         if {[info vars ::halo] != ""} {
             if {[llength $::halo] == 1} {
