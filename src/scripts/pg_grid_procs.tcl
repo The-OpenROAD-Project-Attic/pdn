@@ -9,12 +9,18 @@ namespace eval ::pdn {
 #This file contains procedures that are used for PDN generation
 
     proc get_dir {layer_name} {
+        variable metal_layers 
+        variable metal_layers_dir 
         if {[regexp {.*_PIN_(hor|ver)} $layer_name - dir]} {
             return $dir
         }
         
         set idx [lsearch [get_metal_layers] $layer_name]
-        return [lindex $::met_layer_dir $idx]
+        if {[lindex $metal_layer_dirs $idx] == "HORIZONTAL"} {
+            return "hor"
+        } else {
+            return "ver"
+        }
     }
     
     proc get_rails_layer {} {
@@ -23,25 +29,20 @@ namespace eval ::pdn {
         return [dict get $default_grid_data rails]
     }
 
-    proc convert_viarules_to_def_units {} {
-        global via_tech
+    proc init_via_tech {} {
+        variable tech
         variable def_via_tech
         
-        dict for {rule_name rule} $via_tech {
-            dict set def_via_tech $rule_name [list \
-                lower [list \
-                    layer [dict get $rule lower layer] \
-                    enclosure [lmap x [dict get $rule lower enclosure] {expr round($x * $::def_units)}] \
-                ] \
-                upper [list \
-                    layer [dict get $rule upper layer] \
-                    enclosure [lmap x [dict get $rule upper enclosure] {expr round($x * $::def_units)}] \
-                ] \
-                cut [list \
-                    layer [dict get $rule cut layer] \
-                    size [lmap x [dict get $rule cut size] {expr round($x * $::def_units)}] \
-                    spacing [lmap x [dict get $rule cut spacing] {expr round($x * $::def_units)}] \
-                ] \
+        set def_via_tech {}
+        foreach via_rule [$tech getViaGenerateRules] {
+            set lower [$via_rule getViaLayerRule 0]
+            set upper [$via_rule getViaLayerRule 1]
+            set cut   [$via_rule getViaLayerRule 2]
+
+	    dict set def_via_tech [$via_rule getName] [list \
+                lower [list layer [[$lower getLayer] getName] enclosure [$lower getEnclosure]] \
+                upper [list layer [[$upper getLayer] getName] enclosure [$upper getEnclosure]] \
+                cut   [list layer [[$cut getLayer] getName] spacing [$cut getSpacing] size [list [[$cut getRect] dx] [[$cut getRect] dy]]] \
             ]
         }
     }
@@ -49,10 +50,6 @@ namespace eval ::pdn {
     proc select_viainfo {lower} {
         variable def_via_tech
 
-        if {$def_via_tech == {}} {
-            convert_viarules_to_def_units
-        }
-        
         set layer_name $lower
         regexp {(.*)_PIN} $lower - layer_name
         
@@ -111,10 +108,6 @@ namespace eval ::pdn {
         set max_lower_enclosure [expr max([join [dict get $via_info lower enclosure] ","])]
         set max_upper_enclosure [expr max([join [dict get $via_info upper enclosure] ","])]
 
-if {$rule_name == "A4_Ax_RULE"} {
-    puts "[dict get $via_info lower layer] Width $width -> $lower_width, Height $height -> $lower_height"
-    puts "[dict get $via_info upper layer] Width $width -> $upper_width, Height $height -> $upper_height"
-}
         # What are the maximum number of rows and columns that we can fit in this space?
         set i 0
         set via_width_lower 0
@@ -152,12 +145,6 @@ if {$rule_name == "A4_Ax_RULE"} {
         set max_lower_enclosure [expr round(($lower_size_max_enclosure  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
         set max_upper_enclosure [expr round(($upper_size_max_enclosure  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
 
-if {$rule_name == "A4_Ax_RULE"} {
-    puts "lower_enc_width  $lower_enc_width  round(($lower_width  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)"
-    puts "lower_enc_height $lower_enc_height "
-    puts "upper_enc_width  $upper_enc_width  "
-    puts "upper_enc_height $upper_enc_height "
-}
         # Use the largest value of enclosure in the direction of the layer
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {$lower_dir == "hor"} {
@@ -175,11 +162,7 @@ if {$rule_name == "A4_Ax_RULE"} {
                 set yBotEnc $lower_enc_height
             }
         }
-if {$rule_name == "A4_Ax_RULE"} {
-puts "$lower_dir"
-    puts "xBotEnc $xBotEnc"
-    puts "lower_enc_width  $lower_enc_width "
-}
+
         # Use the largest value of enclosure in the direction of the layer
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {[get_dir [dict get $via_info upper layer]] == "hor"} {
@@ -198,12 +181,6 @@ puts "$lower_dir"
             }
         }
         
-if {$rule_name == "A4_Ax_RULE"} {
-    puts "xBotEnc $xBotEnc"
-    puts "yBotEnc $yBotEnc"
-    puts "xTopEnc $xTopEnc"
-    puts "yTopEnc $yTopEnc"
-}
         set rule [list \
             rule $rule_name \
             cutsize [dict get $via_info cut size] \
@@ -305,7 +282,8 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     variable logical_viarules
     variable default_grid_data
     variable orig_stripe_locs
-
+    variable def_units
+    
     set blockage [dict get $grid_data blockage]
     set area [dict get $grid_data area]
     
@@ -317,7 +295,7 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     if {[dict exists $grid_data layers $layer1]} {
         set layer1_direction [get_dir $layer1]
         set layer1_width [dict get $grid_data layers $layer1 width]
-        set layer1_width [expr round($layer1_width * $::def_units)]
+        set layer1_width [expr round($layer1_width * $def_units)]
     } elseif {[regexp {(.*)_PIN_(hor|ver)} $l1 - layer1 layer1_direction]} {
         #
     } else {
@@ -327,10 +305,10 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     set layer2 $l2
     if {[dict exists $grid_data layers $layer2]} {
         set layer2_width [dict get $grid_data layers $layer2 width]
-        set layer2_width [expr round($layer2_width * $::def_units)]
+        set layer2_width [expr round($layer2_width * $def_units)]
     } elseif {[dict exists $default_grid_data layers $layer2]} {
         set layer2_width [dict get $default_grid_data layers $layer2 width]
-        set layer2_width [expr round($layer2_width * $::def_units)]
+        set layer2_width [expr round($layer2_width * $def_units)]
     } else {
         puts "No width information available for layer $layer2"
     }

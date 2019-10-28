@@ -26,6 +26,9 @@
 ##############################################################################
 
 namespace eval ::pdn {
+    variable block
+    variable tech
+    variable libs
     variable design_data {}
     variable default_grid_data {}
     variable def_output
@@ -33,6 +36,9 @@ namespace eval ::pdn {
     variable pitches
     variable loffset
     variable boffset
+    variable row_height
+    variable site_width
+    variable site_name
     
     ## procedure for file existence check, returns 0 if file does not exist or file exists, but empty
     proc -s {filename} {
@@ -59,139 +65,87 @@ namespace eval ::pdn {
         return "VSSE"
     }
     
+    proc transform_box {xmin ymin xmax ymax origin orientation} {
+        switch {$orientation} {
+            R0    {set new_box $box}
+            R90   {set new_box [list [expr -1 * $ymax] $xmin [expr -1 * $ymin] $xmax]}
+            R180  {set new_box [list [expr -1 * $xmax] [expr -1 * $ymax] [expr -1 * $xmin] [expr -1 * $ymin]]}
+            R270  {set new_box [list $ymin [expr -1 * $xmax] $ymax [expr -1 * $xmin]]}
+            MX    {set new_box [list $xmin [expr -1 * $ymax] $xmax [expr -1 * $ymin]]}
+            MY    {set new_box [list [expr -1 * $xmax] $ymin [expr -1 * $xmin] $ymax]}
+            MXR90 {set new_box [list $ymin $xmin $ymax $xmax]}
+            MYR90 {set new_box [list [expr -1 * $ymax] [expr -1 * $xmax] [expr -1 * $ymin] [expr -1 * $xmin]]}
+        }
+        return [list \
+            [expr [lindex $new_box 0] + [lindex $origin 0]] \
+            [expr [lindex $new_box 1] + [lindex $origin 1]] \
+            [expr [lindex $new_box 2] + [lindex $origin 0]] \
+            [expr [lindex $new_box 3] + [lindex $origin 1]] \
+        }
+    }
+    
     proc get_memory_instance_pg_pins {} {
+        variable block
         variable orig_stripe_locs
-        ########################################
-        # Creating run.param file for PdnPinDumper
-        #
-        #
-        ########################################
 
-        puts "##Power Delivery Network Generator: Generating inputs for PDN Gen"
+        foreach inst [$block getInsts] {
+            set inst_name [$inst getName]
+            set master [$inst getMaster]
 
-        if {![-s $::FpOutDef]} {
-          puts "File $::FpOutDef does not exist, or exists but empty"
-          exit 1
-        }
+            if {[$master getType] == "CORE"} {continue}
+            if {[$master getType] == "IO"} {continue}
 
-        set lef_file_errors 0
-        foreach lef_file $::lef_files {
-            if {![-s $lef_file]} {
-              puts "File $lef_file does not exist, or exists but empty."
-              inc lef_file_errors
-            }
-        }
-        if {${lef_file_errors} > 0} {
-            puts "Please check PDN.cfg"
-            exit $lef_file_errors
-        }
-        
-        set cmd "exec touch dummy.guide"
-        catch {eval $cmd}
+            foreach term_name [concat [get_macro_power_pins $inst_name] [get_macro_ground_pins $inst_name]] {
+                set inst_term [$inst findITerm $term_name]
+                if {$inst_term == "NULL"} {continue}
+                
+                set mterm [$inst_term getMTerm]
+                set type [$mterm getSigType]
 
-        set OP1 [open run.param w]
-        foreach lef_file $::lef_files {
-            puts $OP1 "lef:$lef_file"
-        }
-        puts $OP1 "def:$::FpOutDef"
-        puts $OP1 "guide:dummy.guide"
-        puts $OP1 "output:dummy.def"
-        puts $OP1 "macroList:macrocell.list"
-        puts $OP1 "threads:16"
-        puts $OP1 "cpxthreads:8"
-        puts $OP1 "verbose:2"
-        puts $OP1 "gap:0"
-        puts $OP1 "timeout:2400"
-        close $OP1
+                foreach mPin [$mTerm getMPins] {
+                    foreach geom [$mPin getGeometry} {
+                        set layer [[$geom getTechLayer] getName]
+                        set box [transform_box [$geom xMin] [$geom yMin] [$geom xMax] [$geom yMax] [$inst getOrigin] [$inst getOrient]]
 
-        pdn write_macrocell_list "macrocell.list"
+                        set width  [expr abs([lindex $box 2] - [lindex $box 0])]
+                        set height [expr abs([lindex $box 3] - [lindex $box 1])]
 
-        #set cmd "exec ${wd}/scripts/pdn_input_gen $design"
-        #eval $cmd
-        #exec "PdnPinDumper run.param > pin.loc"
-        #set ch [open "pin.loc"]
-        set ch [open "|PdnPinDumper run.param | tee pin_dumper.log"]
-
-        set mem_pins_vdd_hor {}
-        set mem_pins_vdd_ver {}
-        set mem_pins_vss_hor {}
-        set mem_pins_vss_ver {}
-
-        while {![eof $ch]} {
-            set line [gets $ch]
-            set line [regsub -all {[\(\)\-\,]} $line {}]
-
-            if {[regexp {^instName:\s+(.*);\s+(.*)/([^/]*):} $line - inst_name macro_name pin_name]} {
-                if {[lsearch [get_macro_power_pins $inst_name] $pin_name] != -1} {
-                    set net vdd
-                } elseif {[lsearch [get_macro_ground_pins $inst_name] $pin_name] != -1} {
-                    set net vss
-                } else {
-                    if {[info vars net] != ""} {
-                        unset net
+                        if {$width > $height} {
+                            set xl [lindex $box 0]
+                            set xu [lindex $box 2]
+                            set y  [expr ([lindex $box 1] + [lindex $box 3])/2]
+                            set width [expr [lindex $box 3] - [lindex $box 1]]
+                            lappend orig_stripe_locs(${layer}_PIN_hor,$type) [list $xl $y $xu $width]
+                        } else {
+                            set x  [expr ([lindex $pin 0] + [lindex $pin 2])/2]
+                            set yl [lindex $pin 1]
+                            set yu [lindex $pin 3]
+                            set width [expr [lindex $pin 2] - [lindex $pin 0]]
+                            lappend orig_stripe_locs(${layer}_PIN_ver,$type) [list $x $yl $yu $width]
+                        }
                     }
                 }
-            }
-
-            if {[info vars net] != "" && [llength $line] == 5} {
-                set width  [expr abs([lindex $line 2] - [lindex $line 0])]
-                set height [expr abs([lindex $line 3] - [lindex $line 1])]
-
-                if {$width > $height} {
-                   lappend mem_pins_${net}_hor $line
-                } else {
-                   lappend mem_pins_${net}_ver $line
-                }
             }    
-        }
-
-        if {[catch {close $ch} msg]} {
-            puts "ERROR: PdnPinDumper failed - check pin_dumper.log"
-            puts $msg
-            exit
-        }
-
-        foreach pin $mem_pins_vdd_hor {
-            set xl [lindex $pin 0]
-            set xu [lindex $pin 2]
-            set y  [expr ([lindex $pin 1] + [lindex $pin 3])/2]
-            set width [expr [lindex $pin 3] - [lindex $pin 1]]
-            lappend orig_stripe_locs([lindex $pin 4]_PIN_hor,POWER) [list $xl $y $xu $width]
-        }
-
-        foreach pin $mem_pins_vdd_ver {
-            set x  [expr ([lindex $pin 0] + [lindex $pin 2])/2]
-            set yl [lindex $pin 1]
-            set yu [lindex $pin 3]
-            set width [expr [lindex $pin 2] - [lindex $pin 0]]
-            lappend orig_stripe_locs([lindex $pin 4]_PIN_ver,POWER) [list $x $yl $yu $width]
-        }
-
-        foreach pin $mem_pins_vss_hor {
-            set xl [lindex $pin 0]
-            set xu [lindex $pin 2]
-            set y  [expr ([lindex $pin 1] + [lindex $pin 3])/2]
-            set width [expr [lindex $pin 3] - [lindex $pin 1]]
-            lappend orig_stripe_locs([lindex $pin 4]_PIN_hor,GROUND) [list $xl $y $xu $width]
-        }
-
-        foreach pin $mem_pins_vss_ver {
-            set x  [expr ([lindex $pin 0] + [lindex $pin 2])/2]
-            set yl [lindex $pin 1]
-            set yu [lindex $pin 3]
-            set width [expr [lindex $pin 2] - [lindex $pin 0]]
-            lappend orig_stripe_locs([lindex $pin 4]_PIN_ver,GROUND) [list $x $yl $yu $width]
         }
 
         puts "Total walltime till macro pin geometry creation = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
     }
 
-    proc init {{PDN_cfg "PDN.cfg"}} {
+    proc init {opendb_block {PDN_cfg "PDN.cfg"}} {
+        variable db
+        variable block
+        variable tech
+        variable libs
         variable design_data
         variable def_output
-        variable vias
         variable default_grid_data
         variable stripe_locs
+        variable design_name
+        variable row_height
+        variable site_width
+        variable site_name
+        variable metal_layers
+        variable def_units
         
         set ::start_time [clock clicks -milliseconds]
 
@@ -202,14 +156,26 @@ namespace eval ::pdn {
 
         source $PDN_cfg
 
-        puts "Design Name is $::design"
-        set def_output "${::design}_pdn.def"
+        set block $opendb_block
+        set def_units [$block getDefUnits]
+        set design_name [$block getName]
+        set db [$block getDataBase]
+        set tech [$db getTech]
+        set libs [$db getLibs]
+
+        init_metal_layers
+        init_via_tech
+        
+        set die_area [$block getDieArea]
+        puts "Design Name is $design_name"
+        set def_output "${design_name}_pdn.def"
         
         if {[info vars ::power_nets] == ""} {
             set ::power_nets "VDD"
         }
+        
         if {[info vars ::ground_nets] == ""} {
-            set ::ground_nets "VDD"
+            set ::ground_nets "VSS"
         }
 
         dict set design_data power_nets $::power_nets
@@ -217,7 +183,16 @@ namespace eval ::pdn {
 
         # Sourcing user inputs file
         #
-        set ::row_height [expr {$::def_units * $::row_height}]
+        set sites {}
+        foreach lib $libs {
+            set sites [concat $sites [$lib getSites]]
+        }
+        set site [lindex $sites 0]
+
+        set site_name [$site getName]
+        set site_width [$site getWidth] 
+        
+        set row_height [$site getHeight]
 
         ##### Get information from BEOL LEF
         puts "Reading BEOL LEF and gathering information ..."
@@ -227,12 +202,12 @@ namespace eval ::pdn {
         if {[info vars ::layers] != ""} {
             foreach layer $::layers {
                 if {[dict exists $::layers $layer widthtable]} {
-                    dict set ::layers $layer widthtable [lmap x [dict get $::layers $layer widthtable] {expr $x * $::def_units}]
+                    dict set ::layers $layer widthtable [lmap x [dict get $::layers $layer widthtable] {expr $x * $def_units}]
                 }
             }
             set_layer_info $::layers
         }
-        set vias {}
+
         if {[info vars ::halo] != ""} {
             if {[llength $::halo] == 1} {
                 set default_halo "$::halo $::halo $::halo $::halo"
@@ -241,8 +216,7 @@ namespace eval ::pdn {
             } elseif {[llength $::halo] == 4} {
                 set default_halo $::halo
 	    } else {
-                puts "ERROR: Illegal number of elements defined for ::halo \"$::halo\""
-                exit
+                error "ERROR: Illegal number of elements defined for ::halo \"$::halo\""
             }
         } else {
             set default_halo "0 0 0 0"
@@ -250,14 +224,13 @@ namespace eval ::pdn {
 
         dict set design_data config [list \
             def_output   $def_output \
-            design       $::design \
-            def_units    $::def_units \
+            design       $design_name \
             core_area    [list $::core_area_llx $::core_area_lly $::core_area_urx $::core_area_ury] \
-            die_area     [list $::die_area_llx  $::die_area_lly  $::die_area_urx  $::die_area_ury] \
-            default_halo [lmap x $default_halo {expr $x * $::def_units}] \
+            die_area     [list [$die_area xMin]  [$die_area yMin] [$die_area xMax] [$die_area yMax]] \
+            default_halo [lmap x $default_halo {expr $x * $def_units}] \
         ]
                    
-        foreach lay [get_metal_layers] { 
+        foreach lay $metal_layers { 
 	    set stripe_locs($lay,POWER) ""
 	    set stripe_locs($lay,GROUND) ""
         }
@@ -265,7 +238,7 @@ namespace eval ::pdn {
         ########################################
         # Creating blockages based on macro locations
         #######################################
-        pdn read_macro_boundaries $::FpOutDef $::lef_files
+        pdn read_macro_boundaries
 
         pdn get_memory_instance_pg_pins
 
@@ -274,9 +247,8 @@ namespace eval ::pdn {
         }
 
         ##### Basic sanity checks to see if inputs are given correctly
-        if {[lsearch [get_metal_layers] [get_rails_layer]] < 0} {
-	        puts "ERROR: Layer specified for std. cell rails not in list of layers. EXITING....."
-	        exit
+        if {[lsearch $metal_layers [get_rails_layer]] < 0} {
+	    error "ERROR: Layer specified for std. cell rails not in list of layers."
         }
 
         puts "Total walltime till PDN setup = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
@@ -296,13 +268,13 @@ namespace eval ::pdn {
     
     proc add_grid {grid_data} {
         variable design_data
+        variable def_units
         variable widths
         variable pitches
         variable loffset
         variable boffset
         
         ##### Creating maps for directions, widths and pitches
-        set def_units [dict get $design_data config def_units]
         set area [dict get $grid_data area]
 
         foreach lay [dict keys [dict get $grid_data layers]] { 
@@ -390,8 +362,20 @@ namespace eval ::pdn {
         return $specification
     }
     
-    proc get_metal_layers {} {
-        return $::met_layer_list
+    proc init_metal_layers {} {
+        variable tech
+        variable metal_layers
+        variable metal_layers_dir
+
+        set metal_layers {}        
+        set metal_layers_dir {}
+        
+        foreach layer [$tech getLayers] {
+            if {[$layer getType] == "ROUTING"} {
+                lappend metal_layers [$layer getName]
+                lappend metal_layers_dir [$layer getDirection]
+            }
+        }
     }
 
     proc get_instance_llx {instance} {
@@ -415,11 +399,13 @@ namespace eval ::pdn {
     }
     
     proc get_macro_blockage_layers {instance} {
+        variable metal_layers
+        
         set specification [select_instance_specification $instance]
         if {[dict exists $specification blockage]} {
             return [dict get $specification blockage]
         }
-        return [lrange [get_metal_layers] 0 3]
+        return [lrange $metal_layers 0 3]
     }
     
     proc print_strategy {type specification} {
@@ -445,14 +431,14 @@ namespace eval ::pdn {
         puts "    Connect: [dict get $specification connect]"
     }
     
-    proc power_grid {} {
+    proc plan_grid {} {
         variable design_data
         variable instances
         variable default_grid_data
+        variable def_units
 
         ################################## Main Code #################################
 
-        set def_units [dict get $design_data config def_units]
         puts "****** INFO ******"
         foreach specification [dict get $design_data grid stdcell] {
             print_strategy stdcell $specification
@@ -465,7 +451,7 @@ namespace eval ::pdn {
         foreach specification [dict get $design_data grid stdcell] {
             dict set specification blockage [dict keys $instances]
             if {![dict exists $specification area]} {
-                dict set specification area [lmap x [dict get $design_data config core_area] {expr round($x * $::def_units)}]
+                dict set specification area [lmap x [dict get $design_data config core_area] {expr round($x * $def_units)}]
             }
             pdn add_grid $specification
             if {$default_grid_data == {}} {
@@ -479,9 +465,27 @@ namespace eval ::pdn {
         }
     }
     
+    proc opendb_update_grid {} {
+        write_opendb_vias
+        write_opendb_specialnets
+        write_rows
+    }
+        
+    proc apply_pdn {block config} {
+        pdn init $block $config
+
+        puts "##Power Delivery Network Generator: Generating PDN DEF"
+        set ::start_time [clock clicks -milliseconds]
+
+        pdn plan_grid
+        pdn opendb_update_grid
+
+        puts "Total walltime to generate PDN DEF = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
+    }
+
     namespace export init get_memory_instance_pg_pins 
-    namespace export specify_grid power_grid add_grid get
+    namespace export specify_grid plan_grid add_grid get
     namespace ensemble create
 }
 
-package provide pdn 0.2.0
+package provide pdn 0.3.0

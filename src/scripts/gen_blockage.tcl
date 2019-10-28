@@ -2,16 +2,6 @@ namespace eval ::pdn {
     variable macros {}
     variable instances {}
     
-    proc write_macrocell_list {file_name} {
-        variable macros
-        
-        set ch [open $file_name "w"]
-        foreach macro_name [dict keys $macros] {
-            puts $ch $macro_name
-        }
-        close $ch
-    }
-    
     proc get_macro_boundaries {} {
         variable instances
 
@@ -34,49 +24,26 @@ namespace eval ::pdn {
         return $boundaries
     }
     
-    proc read_macro_boundaries {def lef_files} {
+    proc read_macro_boundaries {} {
+        variable db
         variable macros
         variable instances
-        
-        foreach file $lef_files {
-            set ch [open $file]
 
             while {![eof $ch]} {
                 set line [gets $ch]
 
-                if {[regexp {^s*MACRO ([^\s]*)} $line - macro_name]} {
-                    set reject 0
-                    while {![eof $ch]} {
-                        set line [gets $ch]
-                        if {[regexp "END $macro_name" $line]} {
-                            break
-                        }
-                        if {[regexp {^\s*CLASS CORE} $line]} {set reject 1}
-                        if {[regexp {^\s*CLASS IO} $line]} {set reject 1}
-                        if {[regexp {^\s*CLASS ENDCAP} $line]} {set reject 1}
-                        if {$reject == 1} {break}
+        foreach cell [$db getMasters] {
+            if {[$cell getClass] == "CORE"} {break}
+            if {[$cell getClass] == "IO"} {break}
+            if {[$cell getClass] == "ENDCAP"} {break}
 
-                        regexp {^\s*SIZE ([0-9\.]*) BY ([0-9\.]*)} $line - width height
-                    }
-                    if {$reject == 0} {
-                        dict set macros $macro_name [list width $width height $height]
-                    }
-                }
-            }
-            close $ch
+            set height [$cell getHeight]
+            set width  [$cell getWidth]
+
+            dict set macros [$cell getName] [list width $width height $height]
         }
 
-        set ch [open $def]
-        while {![eof $ch]} {
-            set line [gets $ch]
-
-            regexp {UNITS DISTANCE MICRONS ([0-9]*)} $line - dbu
-
-            if {[regexp {^COMPONENTS [0-9]*} $line]} {
-                set instances [read_def_components $ch [dict keys $macros]]
-            }
-        }
-        close $ch
+        set instances [read_def_components $ch [dict keys $macros]]
 
         foreach instance [dict keys $instances] {
             set macro_name [dict get $instances $instance macro]
@@ -109,37 +76,26 @@ namespace eval ::pdn {
 
     proc read_def_components {ch macros} {
         variable design_data
+        variable db
         set instances {}
 
-        while {![eof $ch]} {
-            set line [gets $ch]
-
-            if {[regexp {END COMPONENTS} $line]} {
-                return $instances
-            }
-
-            while {![regexp {;} $line]} {
-                set line "$line [gets $ch]"
-            }
-
-            set macro_name [lindex $line 2]
+        foreach inst [$db getInsts] {
+            set macro_name [[$inst getMaster] getName]
             if {[lsearch $macros $macro_name] != -1} {
                 set data {}
-                dict set data name [lindex $line 1]
-                if {[set idx [lsearch $line "FIXED"]] != -1} {
-                    dict set data macro $macro_name
-                    dict set data x [lindex $line [expr $idx + 2]]
-                    dict set data y [lindex $line [expr $idx + 3]]
-                    dict set data orient [lindex $line [expr $idx + 5]]
-                }
+                dict set data name [$inst getName]
+                dict set data macro $macro_name
+                dict set data x [lindex [$inst getOrigin] 0]
+                dict set data y [lindex [$inst getOrigin] 1]
+                dict set data orient [$inst getOrient]
 
-                if {[set idx [lsearch $line "HALO"]] != -1} {
-                    dict set data halo [lrange $line [expr $idx + 1] [expr $idx + 4]]
+                if {[$inst getHalo] != ""} {
+                    dict set data halo [$inst getHalo]
                 } else {
                     dict set data halo [dict get $design_data config default_halo]
                 }
 
-                dict set instances [lindex $line 1] $data
+                dict set instances [$inst getName] $data
             }
         }
 
