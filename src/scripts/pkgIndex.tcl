@@ -18,4 +18,4 @@ proc source_pdn {dir} {
     source [file join $dir create_pg_grid.tcl]
 }
 
-package ifneeded pdn 0.2.0 [list source_pdn $dir]
+package ifneeded pdn 0.3.0 [list source_pdn $dir]

@@ -304,7 +304,8 @@ namespace eval ::pdn {
         set macro_specifications [dict get $design_data grid macro]
         
         # If there is a specifcation that matches this instance name, use that
-        foreach specification [lmap spec $macro_specifications {expr {[dict exists $spec instance] ? $spec : [break]}}] {
+        foreach specification $macro_specifications {
+            if {![dict exists $specification instance]} {continue}
             if {[dict get $specification instance] == $instance} {
                 return $specification
             }
@@ -313,20 +314,20 @@ namespace eval ::pdn {
         # If there is a specification that matches this macro name, use that
         set instance_macro [dict get $instances $instance macro]
 
-        set macro_specs [lmap spec $macro_specifications {expr {[dict exists $spec macro] && [dict get $spec macro] == $instance_macro ? $spec : [break]}}]
-        set oriented_macro_specs [lmap spec $macro_specs  {expr {[dict exists $spec orient] ? $spec : [break]}}]
-
         # If there are orientation based specifcations for this macro, use the appropriate one if available
-        foreach specification $oriented_macro_specs {
-            if {[lsearch [dict get $specification orient] [dict get $instances $instance orient]] != -1} {
-                return $specification
+        foreach spec $macro_specifications {
+            if {!([dict exists $spec macro] && [dict get $spec orient] && [dict get $spec macro] == $instance_macro)} {continue}
+            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
+                return $spec
             }
         }
         
         # There should only be one macro specific spec that doesnt have an orientation qualifier
-        set nonoriented_macro_specs [lmap spec $macro_specs  {expr {![dict exists $spec orient] ? $spec : [break]}}]
-        if {[llength $nonoriented_macro_specs] > 0} {
-            return [lindex $nonoriented_macro_specs 0]
+        foreach spec $macro_specifications {
+            if {!([dict exists $spec macro] && [dict get $spec macro] == $instance_macro)} {continue}
+            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
+                return $spec
+            }
         }
 
         # Other wise, use a strategy that specifies neither instance nor macro
@@ -334,21 +335,24 @@ namespace eval ::pdn {
         set oriented_generic_specs [lmap spec $generic_specs  {expr {[dict exists $spec orient] ? $spec : [break]}}]
 
         # If there are orientation based specifcations, use the appropriate one if available
-        foreach specification $oriented_generic_specs {
-            if {[lsearch [dict get $specification orient] [dict get $instances $instance orient]] != -1} {
-                return $specification
+        foreach spec $macro_specifications {
+            if {!(![dict exists $spec macro] && ![dict exists $spec instance] && [dict exists orient])} {continue}
+            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
+                return $spec
             }
         }
 
         # There should only be one macro specific spec that doesnt have an orientation qualifier
-        set nonoriented_generic_specs [lmap spec $oriented_generic_specs  {expr {![dict exists $spec orient] ? $spec : [break]}}]
-        if {[llength $nonoriented_generic_specs] > 0} {
-            return [lindex $nonoriented_generic_specs 0]
+        foreach spec $macro_specifications {
+            if {!(![dict exists $spec macro] && ![dict exists $spec instance])} {continue}
+            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
+                return $spec
+            }
         }
 
-        puts "Error: no matching grid specification found for $instance"
-        exit -1
+        error "Error: no matching grid specification found for $instance"
     }
+    
     proc get_instance_specification {instance} {
         variable instances
 
