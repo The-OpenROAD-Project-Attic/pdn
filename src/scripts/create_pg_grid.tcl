@@ -81,7 +81,7 @@ namespace eval ::pdn {
             [expr [lindex $new_box 1] + [lindex $origin 1]] \
             [expr [lindex $new_box 2] + [lindex $origin 0]] \
             [expr [lindex $new_box 3] + [lindex $origin 1]] \
-        }
+        ]
     }
     
     proc get_memory_instance_pg_pins {} {
@@ -103,7 +103,7 @@ namespace eval ::pdn {
                 set type [$mterm getSigType]
 
                 foreach mPin [$mTerm getMPins] {
-                    foreach geom [$mPin getGeometry} {
+                    foreach geom [$mPin getGeometry] {
                         set layer [[$geom getTechLayer] getName]
                         set box [transform_box [$geom xMin] [$geom yMin] [$geom xMax] [$geom yMax] [$inst getOrigin] [$inst getOrient]]
 
@@ -128,7 +128,7 @@ namespace eval ::pdn {
             }    
         }
 
-        puts "Total walltime till macro pin geometry creation = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
+#        puts "Total walltime till macro pin geometry creation = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
     }
 
     proc init {opendb_block {PDN_cfg "PDN.cfg"}} {
@@ -147,7 +147,7 @@ namespace eval ::pdn {
         variable metal_layers
         variable def_units
         
-        set ::start_time [clock clicks -milliseconds]
+#        set ::start_time [clock clicks -milliseconds]
 
         if {![-s $PDN_cfg]} {
           puts "File $PDN_cfg does not exist, or exists but empty"
@@ -197,7 +197,7 @@ namespace eval ::pdn {
         ##### Get information from BEOL LEF
         puts "Reading BEOL LEF and gathering information ..."
 
-        puts " DONE \[Total elapsed walltime = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds\]"
+#        puts " DONE \[Total elapsed walltime = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds\]"
 
         if {[info vars ::layers] != ""} {
             foreach layer $::layers {
@@ -251,7 +251,7 @@ namespace eval ::pdn {
 	    error "ERROR: Layer specified for std. cell rails not in list of layers."
         }
 
-        puts "Total walltime till PDN setup = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
+#        puts "Total walltime till PDN setup = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
 
         return $design_data
     }
@@ -475,12 +475,12 @@ namespace eval ::pdn {
         pdn init $block $config
 
         puts "##Power Delivery Network Generator: Generating PDN DEF"
-        set ::start_time [clock clicks -milliseconds]
+#         set ::start_time [clock clicks -milliseconds]
 
         pdn plan_grid
         pdn opendb_update_grid
 
-        puts "Total walltime to generate PDN DEF = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
+#        puts "Total walltime to generate PDN DEF = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
     }
 
     namespace export init get_memory_instance_pg_pins 

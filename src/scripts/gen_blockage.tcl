@@ -25,25 +25,24 @@ namespace eval ::pdn {
     }
     
     proc read_macro_boundaries {} {
-        variable db
+        variable libs
         variable macros
         variable instances
 
-            while {![eof $ch]} {
-                set line [gets $ch]
+        foreach lib $libs {
+            foreach cell [$lib getMasters] {
+                if {[$cell getType] == "CORE"} {break}
+                if {[$cell getType] == "IO"} {break}
+                if {[$cell getType] == "ENDCAP"} {break}
+    
+                set height [$cell getHeight]
+                set width  [$cell getWidth]
 
-        foreach cell [$db getMasters] {
-            if {[$cell getClass] == "CORE"} {break}
-            if {[$cell getClass] == "IO"} {break}
-            if {[$cell getClass] == "ENDCAP"} {break}
-
-            set height [$cell getHeight]
-            set width  [$cell getWidth]
-
-            dict set macros [$cell getName] [list width $width height $height]
+                dict set macros [$cell getName] [list width $width height $height]
+            }
         }
 
-        set instances [read_def_components $ch [dict keys $macros]]
+        set instances [read_def_components [dict keys $macros]]
 
         foreach instance [dict keys $instances] {
             set macro_name [dict get $instances $instance macro]
@@ -74,12 +73,12 @@ namespace eval ::pdn {
         }
     }
 
-    proc read_def_components {ch macros} {
+    proc read_def_components {macros} {
         variable design_data
-        variable db
+        variable block
         set instances {}
 
-        foreach inst [$db getInsts] {
+        foreach inst [$block getInsts] {
             set macro_name [[$inst getMaster] getName]
             if {[lsearch $macros $macro_name] != -1} {
                 set data {}
