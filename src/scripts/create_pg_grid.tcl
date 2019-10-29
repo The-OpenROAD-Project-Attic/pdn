@@ -472,22 +472,22 @@ namespace eval ::pdn {
     proc opendb_update_grid {} {
         write_opendb_vias
         write_opendb_specialnets
-        write_rows
+        write_opendb_rows
     }
         
-    proc apply_pdn {block config} {
+    proc apply {block config} {
         pdn init $block $config
 
         puts "##Power Delivery Network Generator: Generating PDN DEF"
 #         set ::start_time [clock clicks -milliseconds]
 
         pdn plan_grid
-        pdn opendb_update_grid
+        opendb_update_grid
 
 #        puts "Total walltime to generate PDN DEF = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
     }
 
-    namespace export init get_memory_instance_pg_pins 
+    namespace export init apply get_memory_instance_pg_pins 
     namespace export specify_grid plan_grid add_grid get
     namespace ensemble create
 }

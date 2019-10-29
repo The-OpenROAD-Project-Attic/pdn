@@ -21,6 +21,8 @@ namespace eval ::pdn {
             $params setXTopEnclosure [lindex [dict get $rule enclosure] 3]
             $params setNumCutRows [lindex [dict get $rule rowcol] 0]
             $params setNumCutCols [lindex [dict get $rule rowcol] 1]
+
+            # $via setViaParams $params
         }
     }
 
@@ -28,123 +30,181 @@ namespace eval ::pdn {
         variable block
         variable instances
         variable metal_layers
- 
+        variable tech 
+        variable stripe_locs
+        variable widths
+
         set net [$block findNet $net_name]
         if {$net == "NULL"} {
             set net [dbNet_create $block $net_name]
         }
         $net setSpecial
-        $net setSigTypePower
+        $net setSigType $signal_type
 
         foreach inst [$block getInsts] {
-            foreach iterm [$inst getITerms] {
-                if {[$iterm getSigType] == "POWER"} {
-                    $iterm setConnected $net
+            set master [$inst getMaster]
+            foreach mterm [$master getMTerms] {
+                if {[$mterm getSigType] == $signal_type} {
+                    dbITerm_connect $inst $net $mterm
                 }
             }
         }
-
-        dict for {inst_name instance} $instances {
-            set inst [$block findInst $inst_name]
-            foreach pin_name [get_macro_power_pins $inst_name] {
-                set iterm [$inst findITerm $pin_name]
-                $iterm setConnected $net
-            }
-        }
+        $net setWildConnected
+        set swire [dbSWire_create $net "ROUTED"]
 
         foreach lay $metal_layers {
-            set dir [get_dir]
+            set layer [$tech findLayer $lay]
+
+            set dir [get_dir $lay]
             if {$dir == "hor"} {
-                foreach l_str $stripe_locs($lay,$tag) {
+                foreach l_str $stripe_locs($lay,$signal_type) {
                     set l1 [lindex $l_str 0]
                     set l2 [lindex $l_str 1]
                     set l3 [lindex $l_str 2]
                     if {$l1 == $l3} {continue}
                     if {$lay == [get_rails_layer]} {
-                        set swire [dbSWire_create]
-                        dbWireGraph_createSegment
-                        def_out "    $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( $l3 * )"
+                        dbSBox_create $swire $layer $l1 [expr $l2 - ($widths($lay)/2)] $l3 [expr $l2 + ($widths($lay)/2)] "FOLLOWPINS"
                     } else {
-                        def_out "    $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( $l3 * )"
+                        dbSBox_create $swire $layer $l1 [expr $l2 - ($widths($lay)/2)] $l3 [expr $l2 + ($widths($lay)/2)] "STRIPE"
                     }
 
                 }
             } elseif {$dir == "ver"} {
-                foreach l_str $stripe_locs($lay,$tag) {
+                foreach l_str $stripe_locs($lay,$signal_type) {
                     set l1 [lindex $l_str 0]
                     set l2 [lindex $l_str 1]
                     set l3 [lindex $l_str 2]
                     if {$l2 == $l3} {continue}
                     if {$lay == [get_rails_layer]} {
-                        def_out "    $lay [expr round($widths($lay))] + SHAPE FOLLOWPIN ( $l1 $l2 ) ( * $l3 )"
+                        dbSBox_create $swire $layer [expr $l1 - ($widths($lay)/2)] $l2 [expr $l1 + ($widths($lay)/2)] $l3 "FOLLOWPINS"
                     } else {
-                        def_out "    $lay [expr round($widths($lay))] + SHAPE STRIPE ( $l1 $l2 ) ( * $l3 )"
+                        dbSBox_create $swire $layer [expr $l1 - ($widths($lay)/2)] $l2 [expr $l1 + ($widths($lay)/2)] $l3 "STRIPE"
                     }
                 }               
             }
         }
-        write_opendb_vias $net_name
+
+        variable vias
+        foreach via $vias {
+            if {[dict get $via net_name] == $net_name} {
+	        # For each layer between l1 and l2, add vias at the intersection
+                foreach via_inst [dict get $via connections] {
+                    set via_name [dict get $via_inst name]
+                    set x        [dict get $via_inst x]
+                    set y        [dict get $via_inst y]
+                    set lay      [dict get $via_inst lower_layer]
+                    regexp {(.*)_PIN} $lay - lay
+                    set layer [$tech findLayer $lay]
+                    dbSBox_create $swire [$block findVia $via_name] $x $y "STRIPE"
+	        }
+            }
+        }
     }
         
     proc write_opendb_specialnets {} {
         variable block
+        variable design_data
         
         foreach net_name [dict get $design_data power_nets] {
             write_opendb_specialnet "VDD" "POWER"
         }
 
         foreach net_name [dict get $design_data ground_nets] {
-            write_opendb_specialnet "VDD" "GROUND"
+            write_opendb_specialnet "VSS" "GROUND"
         }
         
     }
     
+    proc init_orientation {height} {
+        variable lowest_rail
+        variable orient_rows
+        
+        set lowest_rail $height
+        if {$::rails_start_with == "GROUND"} {
+            set orient_rows {0 "R0" 1 "MY"}
+        } else {
+            set orient_rows {0 "MY" 1 "R0"}
+        }
+    }
+
+    proc orientation {height} {
+        variable lowest_rail
+        variable orient_rows
+        variable row_height
+        
+        set row_line [expr int(($height - $lowest_rail) / $row_height)]
+        return [dict get $orient_rows [expr $row_line % 2]]
+    }
+        
     proc write_opendb_row {height start end} {
         variable row_index
         variable block
         variable site
         variable site_width
+        variable def_units
 
         set start  [expr int($start)]
         set height [expr int($height)]
         set end    [expr int($end)]
 
         if {$start == $end} {return}
-	set site_width [expr {int(round($::site_width * $::def_units))}]
-	if {[expr { int($start - ($::core_area_llx * $::def_units)) % $site_width}] == 0} {
+	if {[expr { int($start - ($::core_area_llx * $def_units)) % $site_width}] == 0} {
 		set x $start
-
 	} else {
-		set offset [expr { int($start - ($::core_area_llx * $::def_units)) % $site_width}]
+		set offset [expr { int($start - ($::core_area_llx * $def_units)) % $site_width}]
 		set x [expr {$start + $site_width - $offset}]
-
 	}
 
 	set num  [expr {($end - $x)/$site_width}]
         
-        #def_out "ROW ROW_$row_index $::site_name $x $height [orientation $height] DO $num BY 1 STEP $site_width 0 ;"
-
-        dbRow_create $block ROW_$row_index $site $x $height [orientation $height] "HORIZONTAL" $num $site_width 0
+        dbRow_create $block ROW_$row_index $site $x $height [orientation $height] $num $site_width 0
         incr row_index
     }
 
-    proc write_rows {} {
+    proc write_opendb_rows {} {
         variable stripe_locs
         variable row_height
+        variable row_index
+
+        set row_index 1
         
         set stripes [concat $stripe_locs([get_rails_layer],POWER) $stripe_locs([get_rails_layer],GROUND)]
-        set stripes [lmap x $stripes {expr {[lindex $x 0] == [lindex $x 2] ? [continue] : $x}}]
+        set new_stripes {}
+        foreach stripe $stripes {
+            if {[lindex $stripe 0] != [lindex $stripe 2]} {
+                lappend new_stripes $stripe
+            }
+        }
+        set stripes $new_stripes
         set stripes [lsort -real -index 1 $stripes]
-        set heights [lsort -unique -real [lmap x $stripes {lindex $x 1}]]
+        set heights {}
+        foreach stripe $stripes {
+            lappend heights [lindex $stripe 1]
+        }
+        set heights [lsort -unique -real $heights]
 
         init_orientation [lindex $heights 0]
 
 	foreach height [lrange $heights 0 end-1] {
-            set lower_rails [lsort -real -index 2 [lmap x $stripes {expr {[lindex $x 1] == $height ? $x : [continue] }}]]
-            set lower_rails [lmap x $lower_rails {expr {[lindex $x 0] == [lindex $x 2] ? [continue] : $x}}]
-            set upper_rails [lsort -real -index 2 [lmap x $stripes {expr {[lindex $x 1] == $height + $::row_height ? $x : [continue] }}]]
-            set upper_rails [lmap x $upper_rails {expr {[lindex $x 0] == [lindex $x 2] ? [continue] : $x}}]
-            set upper_extents [concat {*}[lmap x $upper_rails {list [lindex $x 0] [lindex $x 2]}]]
+            set rails {}
+            foreach stripe $stripes {
+                if {[lindex $stripe 1] == $height} {
+                    lappend rails $stripe
+                }
+            }
+            set lower_rails [lsort -real -index 2 $rails]
+            set rails {}
+            foreach stripe $stripes {
+                if {[lindex $stripe 1] == ($height + $row_height)} {
+                    lappend rails $stripe
+                }
+            }
+            set upper_rails [lsort -real -index 2 $rails]
+            set upper_extents {}
+            foreach upper_rail $upper_rails {
+                lappend upper_extents [lindex $upper_rail 0]
+                lappend upper_extents [lindex $upper_rail 2]
+            }
 
             foreach lrail $lower_rails {
                 set idx 0
@@ -173,12 +233,12 @@ namespace eval ::pdn {
                 }
 
                 if {$end <= [lindex $upper_extents $idx]} {
-                    write_row $height $row_start $end
+                    write_opendb_row $height $row_start $end
                     
                 }
 
                 while {$idx < [llength $upper_extents] && $end > [lindex $upper_extents [expr $idx + 1]]} {
-                    write_row $height $row_start [lindex $upper_extents $idx]
+                    write_opendb_row $height $row_start [lindex $upper_extents $idx]
                     set row_start [lindex $upper_extents [expr $idx + 1]]
                     set idx [expr $idx + 2]
                 }
