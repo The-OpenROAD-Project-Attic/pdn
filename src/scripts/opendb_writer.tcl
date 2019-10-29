@@ -1,33 +1,34 @@
 namespace eval ::pdn {
     proc write_opendb_vias {} {
         variable physical_viarules
+        variable block
         variable tech
 
         dict for {name rule} $physical_viarules {
             set via [dbVia_create $block $name]
-            $via setViaGenerateRule [dict get $rule rule]
+            $via setViaGenerateRule [$tech findViaGenerateRule [dict get $rule rule]]
             set params [$via getViaParams]
-            $params setBottomLayer [$tech findLayer [lindex [dict get $rule layers] 0]
-            $params setCutLayer [$tech findLayer [lindex [dict get $rule layers] 2]
-            $params setTopLayer [$tech findLayer [lindex [dict get $rule layers] 1]
+            $params setBottomLayer [$tech findLayer [lindex [dict get $rule layers] 0]]
+            $params setCutLayer [$tech findLayer [lindex [dict get $rule layers] 2]]
+            $params setTopLayer [$tech findLayer [lindex [dict get $rule layers] 1]]
             $params setXCutSize [lindex [dict get $rule cutsize] 0]
             $params setYCutSize [lindex [dict get $rule cutsize] 1]
             $params setXCutSpacing [lindex [dict get $rule cutspacing] 0]
             $params setYCutSpacing [lindex [dict get $rule cutspacing] 1]
-            $params setXBottomEnlosure [lindex [dict get $rule enclosure] 0]
-            $params setYBottomEnlosure [lindex [dict get $rule enclosure] 1]
-            $params setXTopEnlosure [lindex [dict get $rule enclosure] 2]
-            $params setXTopEnlosure [lindex [dict get $rule enclosure] 3]
+            $params setXBottomEnclosure [lindex [dict get $rule enclosure] 0]
+            $params setYBottomEnclosure [lindex [dict get $rule enclosure] 1]
+            $params setXTopEnclosure [lindex [dict get $rule enclosure] 2]
+            $params setXTopEnclosure [lindex [dict get $rule enclosure] 3]
             $params setNumCutRows [lindex [dict get $rule rowcol] 0]
             $params setNumCutCols [lindex [dict get $rule rowcol] 1]
         }
-        
     }
 
     proc write_opendb_specialnet {net_name signal_type} {
         variable block
         variable instances
-        
+        variable metal_layers
+ 
         set net [$block findNet $net_name]
         if {$net == "NULL"} {
             set net [dbNet_create $block $net_name]
@@ -51,7 +52,7 @@ namespace eval ::pdn {
             }
         }
 
-        foreach lay [get_metal_layers] {
+        foreach lay $metal_layers {
             set dir [get_dir]
             if {$dir == "hor"} {
                 foreach l_str $stripe_locs($lay,$tag) {
@@ -98,8 +99,38 @@ namespace eval ::pdn {
         
     }
     
+    proc write_opendb_row {height start end} {
+        variable row_index
+        variable block
+        variable site
+        variable site_width
+
+        set start  [expr int($start)]
+        set height [expr int($height)]
+        set end    [expr int($end)]
+
+        if {$start == $end} {return}
+	set site_width [expr {int(round($::site_width * $::def_units))}]
+	if {[expr { int($start - ($::core_area_llx * $::def_units)) % $site_width}] == 0} {
+		set x $start
+
+	} else {
+		set offset [expr { int($start - ($::core_area_llx * $::def_units)) % $site_width}]
+		set x [expr {$start + $site_width - $offset}]
+
+	}
+
+	set num  [expr {($end - $x)/$site_width}]
+        
+        #def_out "ROW ROW_$row_index $::site_name $x $height [orientation $height] DO $num BY 1 STEP $site_width 0 ;"
+
+        dbRow_create $block ROW_$row_index $site $x $height [orientation $height] "HORIZONTAL" $num $site_width 0
+        incr row_index
+    }
+
     proc write_rows {} {
         variable stripe_locs
+        variable row_height
         
         set stripes [concat $stripe_locs([get_rails_layer],POWER) $stripe_locs([get_rails_layer],GROUND)]
         set stripes [lmap x $stripes {expr {[lindex $x 0] == [lindex $x 2] ? [continue] : $x}}]
@@ -155,5 +186,5 @@ namespace eval ::pdn {
         }
     }
 
-    
+    namespace export write_opendb_vias write_opendb_specialnets write_opendb_rows    
 }

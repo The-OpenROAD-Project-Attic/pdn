@@ -36,9 +36,12 @@ namespace eval ::pdn {
     variable pitches
     variable loffset
     variable boffset
-    variable row_height
+    variable site
     variable site_width
     variable site_name
+    variable row_height
+    variable metal_layers {}
+    variable metal_layers_dir {}
     
     ## procedure for file existence check, returns 0 if file does not exist or file exists, but empty
     proc -s {filename} {
@@ -141,6 +144,7 @@ namespace eval ::pdn {
         variable default_grid_data
         variable stripe_locs
         variable design_name
+        variable site
         variable row_height
         variable site_width
         variable site_name
@@ -312,42 +316,38 @@ namespace eval ::pdn {
         }
         
         # If there is a specification that matches this macro name, use that
-        set instance_macro [dict get $instances $instance macro]
+        if {[dict exists $instances $instance]} {
+            set instance_macro [dict get $instances $instance macro]
 
-        # If there are orientation based specifcations for this macro, use the appropriate one if available
-        foreach spec $macro_specifications {
-            if {!([dict exists $spec macro] && [dict get $spec orient] && [dict get $spec macro] == $instance_macro)} {continue}
-            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
-                return $spec
+            # If there are orientation based specifcations for this macro, use the appropriate one if available
+            foreach spec $macro_specifications {
+                if {!([dict exists $spec macro] && [dict get $spec orient] && [dict get $spec macro] == $instance_macro)} {continue}
+                if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
+                    return $spec
+                }
             }
-        }
         
-        # There should only be one macro specific spec that doesnt have an orientation qualifier
-        foreach spec $macro_specifications {
-            if {!([dict exists $spec macro] && [dict get $spec macro] == $instance_macro)} {continue}
-            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
-                return $spec
+            # There should only be one macro specific spec that doesnt have an orientation qualifier
+            foreach spec $macro_specifications {
+                if {!([dict exists $spec macro] && [dict get $spec macro] == $instance_macro)} {continue}
+                if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
+                    return $spec
+                }
             }
-        }
 
-        # Other wise, use a strategy that specifies neither instance nor macro
-        set generic_specs [lmap spec $macro_specifications {expr {(![dict exists $spec macro] && ![dict exists $spec instance]) ? $spec : [break]}}]
-        set oriented_generic_specs [lmap spec $generic_specs  {expr {[dict exists $spec orient] ? $spec : [break]}}]
-
-        # If there are orientation based specifcations, use the appropriate one if available
-        foreach spec $macro_specifications {
-            if {!(![dict exists $spec macro] && ![dict exists $spec instance] && [dict exists orient])} {continue}
-            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
-                return $spec
+            # If there are orientation based specifcations, use the appropriate one if available
+            foreach spec $macro_specifications {
+                if {!(![dict exists $spec macro] && ![dict exists $spec instance] && [dict exists orient])} {continue}
+                if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
+                    return $spec
+                }
             }
         }
 
         # There should only be one macro specific spec that doesnt have an orientation qualifier
         foreach spec $macro_specifications {
             if {!(![dict exists $spec macro] && ![dict exists $spec instance])} {continue}
-            if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
-                return $spec
-            }
+            return $spec
         }
 
         error "Error: no matching grid specification found for $instance"

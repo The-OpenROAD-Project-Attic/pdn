@@ -1,6 +1,7 @@
 namespace eval ::pdn {
 
     variable logical_viarules {}
+    variable physical_viarules {}
     variable vias {}
     variable stripe_locs
     variable orig_stripe_locs
@@ -15,8 +16,8 @@ namespace eval ::pdn {
             return $dir
         }
         
-        set idx [lsearch [get_metal_layers] $layer_name]
-        if {[lindex $metal_layer_dirs $idx] == "HORIZONTAL"} {
+        set idx [lsearch $metal_layers $layer_name]
+        if {[lindex $metal_layers_dir $idx] == "HORIZONTAL"} {
             return "hor"
         } else {
             return "ver"
@@ -103,11 +104,24 @@ namespace eval ::pdn {
         set upper_width  [get_adjusted_width [dict get $via_info upper layer] $width]
         set upper_height [get_adjusted_width [dict get $via_info upper layer] $height]
         
-        set lower_enclosure [expr min([join [dict get $via_info lower enclosure] ","])]
-        set upper_enclosure [expr min([join [dict get $via_info upper enclosure] ","])]
-        set max_lower_enclosure [expr max([join [dict get $via_info lower enclosure] ","])]
-        set max_upper_enclosure [expr max([join [dict get $via_info upper enclosure] ","])]
+        set lower_enclosure [lindex [dict get $via_info lower enclosure] 0]
+        set max_lower_enclosure [lindex [dict get $via_info lower enclosure] 1]
+        
+        if {$max_lower_enclosure < $lower_enclosure} {
+            set swap $lower_enclosure
+            set lower_enclosure $max_lower_enclosure
+            set max_lower_enclosure $swap
+        }
 
+        set upper_enclosure [lindex [dict get $via_info upper enclosure] 0]
+        set max_upper_enclosure [lindex [dict get $via_info upper enclosure] 1]
+
+        if {$max_upper_enclosure < $upper_enclosure} {
+            set swap $upper_enclosure
+            set upper_enclosure $max_upper_enclosure
+            set max_upper_enclosure $swap
+        }
+        
         # What are the maximum number of rows and columns that we can fit in this space?
         set i 0
         set via_width_lower 0
@@ -149,7 +163,10 @@ namespace eval ::pdn {
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {$lower_dir == "hor"} {
             if {$lower_enc_height < $max_lower_enclosure} {
-                set xBotEnc [expr max($max_lower_enclosure,$lower_enc_width)]
+                set xBotEnc $max_lower_enclosure
+                if {$lower_enc_width > $xBotEnc} {
+                    set xBotEnc $lower_enc_width
+                }
             } else {
                 set xBotEnc $lower_enc_width
             }
@@ -157,7 +174,10 @@ namespace eval ::pdn {
         } else {
             set xBotEnc $lower_enc_width
             if {$lower_enc_width < $max_lower_enclosure} {
-                set yBotEnc [expr max($max_lower_enclosure,$lower_enc_height)]
+                set yBotEnc $max_lower_enclosure
+                if {$lower_enc_height > $yBotEnc} {
+                    set yBotEnc $lower_enc_height
+                }
             } else {
                 set yBotEnc $lower_enc_height
             }
@@ -167,7 +187,10 @@ namespace eval ::pdn {
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {[get_dir [dict get $via_info upper layer]] == "hor"} {
             if {$upper_enc_height < $max_upper_enclosure} {
-                set xTopEnc [expr max($max_upper_enclosure,$upper_enc_width)]
+                set xTopEnc $max_upper_enclosure
+                if {$upper_enc_width > $xTopEnc} {
+                    set xTopEnc $upper_enc_width
+                }
             } else {
                 set xTopEnc $upper_enc_width
             }
@@ -175,7 +198,10 @@ namespace eval ::pdn {
         } else {
             set xTopEnc $upper_enc_width
             if {$upper_enc_width < $max_upper_enclosure} {
-                set yTopEnc [expr max($max_upper_enclosure,$upper_enc_height)]
+                set yTopEnc $max_upper_enclosure
+                if {$upper_enc_height > $yTopEnc} {
+                    set yTopEnc $upper_enc_height
+                }
             } else {
                 set yTopEnc $upper_enc_height
             }
@@ -185,7 +211,10 @@ namespace eval ::pdn {
             rule $rule_name \
             cutsize [dict get $via_info cut size] \
             layers [list [dict get $via_info lower layer] [dict get $via_info cut layer] [dict get $via_info upper layer]] \
-            cutspacing [lmap spacing [dict get $via_info cut spacing] size [dict get $via_info cut size] {expr $spacing - $size}] \
+            cutspacing [list \
+                [expr [lindex [dict get $via_info cut spacing] 0] - [lindex [dict get $via_info cut size] 0]] \
+                [expr [lindex [dict get $via_info cut spacing] 1] - [lindex [dict get $via_info cut size] 1]] \
+            ] \
             rowcol [list $rows $columns] \
             enclosure [list $xBotEnc $yBotEnc $xTopEnc $yTopEnc] \
         ]
@@ -241,14 +270,15 @@ namespace eval ::pdn {
     proc generate_vias {layer1 layer2 intersections} {
         variable logical_viarules
         variable physical_viarules
+        variable metal_layers
 
         set vias {}
         set layer1_name $layer1
         set layer2_name $layer2
         regexp {(.*)_PIN_(hor|ver)} $layer1 - layer1_name layer1_direction
         
-        set i1 [lsearch [get_metal_layers] $layer1_name]
-        set i2 [lsearch [get_metal_layers] $layer2_name]
+        set i1 [lsearch $metal_layers $layer1_name]
+        set i2 [lsearch $metal_layers $layer2_name]
         if {$i1 == -1} {puts "Layer1 [dict get $connect layer1], Layer2 $layer2"; exit -1}
         if {$i2 == -1} {puts "Layer1 [dict get $connect layer1], Layer2 $layer2"; exit -1}
 
@@ -266,7 +296,7 @@ namespace eval ::pdn {
             set width  [dict get $logical_rule width]
             set height  [dict get $logical_rule height]
             
-            set connection_layers [list $layer1 {*}[lrange [get_metal_layers] [expr $i1 + 1] [expr $i2 - 1]]]
+            set connection_layers [list $layer1 {*}[lrange $metal_layers [expr $i1 + 1] [expr $i2 - 1]]]
 	    foreach lay $connection_layers {
                 set via_name [get_via $lay $x $y $width $height]
 
@@ -427,6 +457,7 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
 proc generate_lower_metal_followpin_rails {tag area} {
     variable orig_stripe_locs
     variable stripe_locs
+    variable row_height
 
 	#Assumes horizontal stripes
 	set lay [get_rails_layer]
@@ -434,14 +465,14 @@ proc generate_lower_metal_followpin_rails {tag area} {
 	if {$tag == $::rails_start_with} { ;#If starting from bottom with this net, 
 		set lly [lindex $area 1]
 	} else {
-		set lly [expr {[lindex $area 1] + $::row_height}]
+		set lly [expr {[lindex $area 1] + $row_height}]
 	}
 	lappend stripe_locs($lay,$tag) "[lindex $area 0] $lly [lindex $area 2]"
 	lappend orig_stripe_locs($lay,$tag) "[lindex $area 0] $lly [lindex $area 2]"
 
 
 	#Rail every alternate rows - Assuming horizontal rows and full width rails
-	for {set y [expr {$lly + (2 * $::row_height)}]} {$y <= [lindex $area 3]} {set y [expr {$y + (2 * $::row_height)}]} {
+	for {set y [expr {$lly + (2 * $row_height)}]} {$y <= [lindex $area 3]} {set y [expr {$y + (2 * $row_height)}]} {
 	    lappend stripe_locs($lay,$tag) "[lindex $area 0] $y [lindex $area 2]"
 	    lappend orig_stripe_locs($lay,$tag) "[lindex $area 0] $y [lindex $area 2]"
 	}
@@ -514,9 +545,17 @@ proc location_stripe_blockage {loc1 loc2 loc3 lay area tag b1 b2 b3 b4} {
 		##Check if stripe is passing through blockage
 		##puts "HORIZONTAL BLOCKAGE "
 		set x1 $loc1
-		set y1 [expr max($loc2 - $widths($lay)/2, [lindex $area 1])]
+                set y1 [expr $loc2 - $widths($lay)/2]
+                if {[lindex $area 1] > $y1} {
+                    set y1 [lindex $area 1]
+                }
+		set y1 [expr $loc2 - $widths($lay)/2]
 		set x2 $loc3
-		set y2 [expr min($y1 +  $widths($lay),[lindex $area 3])]
+                set y2 [expr $y1 +  $widths($lay)]
+                if {[lindex $area 3] < $y2} {
+                    set y2 [lindex $area 3]
+                }
+
                 #puts "segment:  [format {%9.1f %9.1f} $loc1 $loc3]"              
                 #puts "blockage: [format {%9.1f %9.1f} $b1 $b3]"
 		if {  ($y1 >= $b2) && ($y2 <= $b4) && ( ($x1 <= $b3 && $x2 >= $b3) || ($x1 <= $b1 && $x2 >= $b1)  || ($x1 <= $b1 && $x2 >= $b3) || ($x1 <= $b3 && $x2 >= $b1) )  } {
