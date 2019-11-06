@@ -24,24 +24,16 @@ RUN wget https://cmake.org/files/v3.14/cmake-3.14.0-Linux-x86_64.sh && \
     chmod +x cmake-3.14.0-Linux-x86_64.sh  && \
     ./cmake-3.14.0-Linux-x86_64.sh --skip-license --prefix=/usr/local
 
-# Installing boost for build dependency
-RUN wget https://dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.bz2 && \
-    tar -xf boost_1_68_0.tar.bz2 && \
-    cd boost_1_68_0 && \
-    ./bootstrap.sh && \
-    ./b2 install
-
-COPY . /pdn
-RUN mkdir -p /pdn/src/PdnPinDumper/build
-WORKDIR /pdn/src/PdnPinDumper/build
+RUN git clone git@github.com:The-OpenROAD-Project/OpenDB.git -b develop OpenDB
+RUN mkdir -p /OpenDB/build
+WORKDIR /OpenDB/build
 RUN cmake ..
-RUN make PdnPinDumper
+RUN make 
 
 FROM openroad/centos6-tcl8.6 AS runner
-RUN yum update -y && yum install -y perl
-COPY --from=builder /pdn/src/PdnPinDumper/build/PdnPinDumper /build/PdnPinDumper
-COPY --from=builder /pdn/src/scripts /build/scripts/
+COPY --from=builder /OpenDB/build/src/swig/tcl/opendbtcl /build/opendbtcl
+COPY --from=builder /pdn/src/scripts /build/src/scripts/
 COPY --from=builder /pdn/test /build/test/
-ENV PATH=/build:/build/scripts/:$PATH \
+ENV PATH=/build:$PATH \
     TCLLIBPATH="/build/scripts $TCLLIBPATH"
 WORKDIR /build/test
