@@ -2,6 +2,7 @@
 *.lef
 *.lib
 *.v
+*.odb
 dummy.guide
 macrocell.list
 pin_dumper.log

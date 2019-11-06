@@ -1,21 +1,21 @@
-$(BLOCK)_pdn.def : PDN.cfg
-	apply_pdn PDN.cfg
-
 check: $(BLOCK)_pdn.def
-	sed -e '1,4d' $< | diff -q - $(BLOCK)_pdn.check
+	diff -q $< $(BLOCK)_pdn.check
+
+test: $(BLOCK)_pdn.def
 
 approve: $(BLOCK)_pdn.check
 
+$(BLOCK).fp.odb :
+	opendbtcl ../init_db.tcl
+
+$(BLOCK)_pdn.def : $(BLOCK).fp.odb PDN.cfg
+	opendbtcl ../apply_pdn.tcl
+
 $(BLOCK)_pdn.check: $(BLOCK)_pdn.def
-	sed -e '1,4d' $< > $@
+	cp $< $@
 
 clean:
-	-@rm dummy.guide
-	-@rm macrocell.list
-	-@rm run.param
-	-@rm pin_dumper.log
 	-@rm $(BLOCK)_pdn.def
-	-@rm $(BLOCK)_post_T8.def
 	-@rm $(BLOCK).geom.rpt
 	-@rm floorplan.def.v
 
