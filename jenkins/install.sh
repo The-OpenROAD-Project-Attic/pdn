@@ -1,4 +1,4 @@
-mkdir -p /pdn/src/PdnPinDumper/build
-cd /pdn/src/PdnPinDumper/build
+mkdir -p /OpenDB/build
+cd /OpenDB/build
 cmake ..
-make PdnPinDumper
+make 

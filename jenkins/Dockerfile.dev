@@ -31,5 +31,7 @@ RUN wget https://dl.bintray.com/boostorg/release/1.68.0/source/boost_1_68_0.tar.
     ./bootstrap.sh && \
     ./b2 install
 
-ENV PATH=/pdn/src/PdnPinDumper/build:/pdn/src/scripts/:$PATH
+RUN git clone git@github.com:The-OpenROAD-Project/OpenDB.git -b develop OpenDB
+
+ENV PATH=/OpenDB/build/src/swig/tcl:$PATH
 ENV TCLLIBPATH="/pdn/src/scripts $TCLLIBPATH"
