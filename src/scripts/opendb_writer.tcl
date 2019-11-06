@@ -18,11 +18,11 @@ namespace eval ::pdn {
             $params setXBottomEnclosure [lindex [dict get $rule enclosure] 0]
             $params setYBottomEnclosure [lindex [dict get $rule enclosure] 1]
             $params setXTopEnclosure [lindex [dict get $rule enclosure] 2]
-            $params setXTopEnclosure [lindex [dict get $rule enclosure] 3]
+            $params setYTopEnclosure [lindex [dict get $rule enclosure] 3]
             $params setNumCutRows [lindex [dict get $rule rowcol] 0]
             $params setNumCutCols [lindex [dict get $rule rowcol] 1]
 
-            # $via setViaParams $params
+            $via setViaParams $params
         }
     }
 
@@ -48,6 +48,11 @@ namespace eval ::pdn {
                     dbITerm_connect $inst $net $mterm
                 }
             }
+            foreach iterm [$inst getITerms] {
+                if {[$iterm getNet] != "NULL" && [[$iterm getNet] getName] == $net_name} {
+                    $iterm setSpecial
+                }
+            }
         }
         $net setWildConnected
         set swire [dbSWire_create $net "ROUTED"]
@@ -63,7 +68,7 @@ namespace eval ::pdn {
                     set l3 [lindex $l_str 2]
                     if {$l1 == $l3} {continue}
                     if {$lay == [get_rails_layer]} {
-                        dbSBox_create $swire $layer $l1 [expr $l2 - ($widths($lay)/2)] $l3 [expr $l2 + ($widths($lay)/2)] "FOLLOWPINS"
+                        dbSBox_create $swire $layer $l1 [expr $l2 - ($widths($lay)/2)] $l3 [expr $l2 + ($widths($lay)/2)] "FOLLOWPIN"
                     } else {
                         dbSBox_create $swire $layer $l1 [expr $l2 - ($widths($lay)/2)] $l3 [expr $l2 + ($widths($lay)/2)] "STRIPE"
                     }
@@ -76,7 +81,7 @@ namespace eval ::pdn {
                     set l3 [lindex $l_str 2]
                     if {$l2 == $l3} {continue}
                     if {$lay == [get_rails_layer]} {
-                        dbSBox_create $swire $layer [expr $l1 - ($widths($lay)/2)] $l2 [expr $l1 + ($widths($lay)/2)] $l3 "FOLLOWPINS"
+                        dbSBox_create $swire $layer [expr $l1 - ($widths($lay)/2)] $l2 [expr $l1 + ($widths($lay)/2)] $l3 "FOLLOWPIN"
                     } else {
                         dbSBox_create $swire $layer [expr $l1 - ($widths($lay)/2)] $l2 [expr $l1 + ($widths($lay)/2)] $l3 "STRIPE"
                     }
@@ -121,9 +126,9 @@ namespace eval ::pdn {
         
         set lowest_rail $height
         if {$::rails_start_with == "GROUND"} {
-            set orient_rows {0 "R0" 1 "MY"}
+            set orient_rows {0 "R0" 1 "MX"}
         } else {
-            set orient_rows {0 "MY" 1 "R0"}
+            set orient_rows {0 "MX" 1 "R0"}
         }
     }
 
@@ -157,7 +162,7 @@ namespace eval ::pdn {
 
 	set num  [expr {($end - $x)/$site_width}]
         
-        dbRow_create $block ROW_$row_index $site $x $height [orientation $height] $num $site_width 0
+        dbRow_create $block ROW_$row_index $site $x $height [orientation $height] "HORIZONTAL" $num $site_width
         incr row_index
     }
 
@@ -235,12 +240,12 @@ namespace eval ::pdn {
                 if {$end <= [lindex $upper_extents $idx]} {
                     write_opendb_row $height $row_start $end
                     
-                }
-
-                while {$idx < [llength $upper_extents] && $end > [lindex $upper_extents [expr $idx + 1]]} {
-                    write_opendb_row $height $row_start [lindex $upper_extents $idx]
-                    set row_start [lindex $upper_extents [expr $idx + 1]]
-                    set idx [expr $idx + 2]
+                } else {
+                    while {$idx < [llength $upper_extents] && $end > [lindex $upper_extents [expr $idx + 1]]} {
+                        write_opendb_row $height $row_start [lindex $upper_extents $idx]
+                        set row_start [lindex $upper_extents [expr $idx + 1]]
+                        set idx [expr $idx + 2]
+                    }
                 }
             }
         }
