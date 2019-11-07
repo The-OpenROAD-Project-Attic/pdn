@@ -16,6 +16,7 @@ $(BLOCK)_pdn.check: $(BLOCK)_pdn.def
 
 clean:
 	-@rm $(BLOCK)_pdn.def
+	-@rm $(BLOCK).fp.odb
 	-@rm $(BLOCK).geom.rpt
 	-@rm floorplan.def.v
 
