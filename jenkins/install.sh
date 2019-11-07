@@ -1,4 +1,4 @@
-mkdir -p /OpenDB/build
-cd /OpenDB/build
+mkdir -p /pdn/module/OpenDB/build
+cd /pdn/module/OpenDB/build
 cmake ..
-make 
+make
