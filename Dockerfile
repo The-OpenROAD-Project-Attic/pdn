@@ -15,6 +15,4 @@ COPY --from=builder /pdn/src/scripts /build/src/scripts/
 COPY --from=builder /pdn/test /build/test/
 ENV PATH=/pdn/module/OpenDB/build/src/swig/tcl:/build:/build/scripts/:$PATH \
     TCLLIBPATH="/build/src/scripts $TCLLIBPATH"
-WORKDIR /build/test
 WORKDIR /pdn
-
