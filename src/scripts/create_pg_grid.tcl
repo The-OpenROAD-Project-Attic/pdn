@@ -69,8 +69,8 @@ namespace eval ::pdn {
     }
     
     proc transform_box {xmin ymin xmax ymax origin orientation} {
-        switch {$orientation} {
-            R0    {set new_box $box}
+        switch -exact $orientation {
+            R0    {set new_box [list $xmin $ymax $ymin $xmax]}
             R90   {set new_box [list [expr -1 * $ymax] $xmin [expr -1 * $ymin] $xmax]}
             R180  {set new_box [list [expr -1 * $xmax] [expr -1 * $ymax] [expr -1 * $xmin] [expr -1 * $ymin]]}
             R270  {set new_box [list $ymin [expr -1 * $xmax] $ymax [expr -1 * $xmin]]}
@@ -78,6 +78,7 @@ namespace eval ::pdn {
             MY    {set new_box [list [expr -1 * $xmax] $ymin [expr -1 * $xmin] $ymax]}
             MXR90 {set new_box [list $ymin $xmin $ymax $xmax]}
             MYR90 {set new_box [list [expr -1 * $ymax] [expr -1 * $xmax] [expr -1 * $ymin] [expr -1 * $xmin]]}
+            default {error "Illegal orientation $orientation specified"}
         }
         return [list \
             [expr [lindex $new_box 0] + [lindex $origin 0]] \
@@ -97,6 +98,13 @@ namespace eval ::pdn {
 
             if {[$master getType] == "CORE"} {continue}
             if {[$master getType] == "IO"} {continue}
+            if {[$master getType] == "SPACER"} {continue}
+            if {[$master getType] == "NONE"} {continue}
+            if {[$master getType] == "ENDCAP_PRE"} {continue}
+            if {[$master getType] == "ENDCAP"} {continue}
+            if {[$master getType] == "CORE_SPACER"} {continue}
+            if {[$master getType] == "CORE_TIEHIGH"} {continue}
+            if {[$master getType] == "CORE_TIELOW"} {continue}
 
             foreach term_name [concat [get_macro_power_pins $inst_name] [get_macro_ground_pins $inst_name]] {
                 set inst_term [$inst findITerm $term_name]
@@ -105,7 +113,7 @@ namespace eval ::pdn {
                 set mterm [$inst_term getMTerm]
                 set type [$mterm getSigType]
 
-                foreach mPin [$mTerm getMPins] {
+                foreach mPin [$mterm getMPins] {
                     foreach geom [$mPin getGeometry] {
                         set layer [[$geom getTechLayer] getName]
                         set box [transform_box [$geom xMin] [$geom yMin] [$geom xMax] [$geom yMax] [$inst getOrigin] [$inst getOrient]]
@@ -120,17 +128,16 @@ namespace eval ::pdn {
                             set width [expr [lindex $box 3] - [lindex $box 1]]
                             lappend orig_stripe_locs(${layer}_PIN_hor,$type) [list $xl $y $xu $width]
                         } else {
-                            set x  [expr ([lindex $pin 0] + [lindex $pin 2])/2]
-                            set yl [lindex $pin 1]
-                            set yu [lindex $pin 3]
-                            set width [expr [lindex $pin 2] - [lindex $pin 0]]
+                            set x  [expr ([lindex $box 0] + [lindex $box 2])/2]
+                            set yl [lindex $box 1]
+                            set yu [lindex $box 3]
+                            set width [expr [lindex $box 2] - [lindex $box 0]]
                             lappend orig_stripe_locs(${layer}_PIN_ver,$type) [list $x $yl $yu $width]
                         }
                     }
                 }
             }    
         }
-
 #        puts "Total walltime till macro pin geometry creation = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
     }
 
@@ -152,7 +159,6 @@ namespace eval ::pdn {
         variable def_units
         
 #        set ::start_time [clock clicks -milliseconds]
-
         if {![-s $PDN_cfg]} {
           puts "File $PDN_cfg does not exist, or exists but empty"
           exit 1
@@ -262,7 +268,7 @@ namespace eval ::pdn {
     
     proc specify_grid {type specification} {
         variable design_data
-        
+
         set specification [list $specification]
         if {[dict exists $design_data grid $type]} {
             set specification [concat [dict get $design_data grid $type] $specification]
@@ -337,7 +343,7 @@ namespace eval ::pdn {
 
             # If there are orientation based specifcations, use the appropriate one if available
             foreach spec $macro_specifications {
-                if {!(![dict exists $spec macro] && ![dict exists $spec instance] && [dict exists orient])} {continue}
+                if {!(![dict exists $spec macro] && ![dict exists $spec instance] && [dict exists $spec orient])} {continue}
                 if {[lsearch [dict get $spec orient] [dict get $instances $instance orient]] != -1} {
                     return $spec
                 }
@@ -427,10 +433,7 @@ namespace eval ::pdn {
             puts "    Macro orientation: [dict get $specification orient]"
         }
         dict for {layer_name layer} [dict get $specification layers] {
-            puts "    Layer: $layer_name"
-            puts "        Width:  [dict get $layer width]"
-            puts "        Pitch:  [dict get $layer pitch]"
-            puts "        Offset: [dict get $layer offset]"
+            puts [format "    Layer: %s, Width: %f Pitch: %f Offset: %f" $layer_name [dict get $layer width]  [dict get $layer pitch] [dict get $layer offset]]
         }
         puts "    Connect: [dict get $specification connect]"
     }

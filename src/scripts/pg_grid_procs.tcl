@@ -347,99 +347,109 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     
     if {$layer1_direction == "hor" && [get_dir $l2] == "ver"} {
 
-        #loop over each stripe of layer 1 and layer 2 
-	foreach l1_str $orig_stripe_locs($l1,$tag) {
-	    set a1  [expr {[lindex $l1_str 1]}]
+        if {[array names orig_stripe_locs "$l1,$tag"] != ""} {
+            ## puts "Checking [llength $orig_stripe_locs($l1,$tag)] horizontal stripes on $l1, $tag"
+            ## puts "  versus [llength $orig_stripe_locs($l2,$tag)] vertical   stripes on $l2, $tag"
+            ## puts "     and [llength $blockage] blockages"
+            #loop over each stripe of layer 1 and layer 2 
+	    foreach l1_str $orig_stripe_locs($l1,$tag) {
+	        set a1  [expr {[lindex $l1_str 1]}]
 
-	    foreach l2_str $orig_stripe_locs($l2,$tag) {
-		set flag 1
-		set a2	[expr {[lindex $l2_str 0]}]
+	        foreach l2_str $orig_stripe_locs($l2,$tag) {
+		    set flag 1
+		    set a2	[expr {[lindex $l2_str 0]}]
 
-                # Ignore if outside the area
-                if {!($a2 >= [lindex $area 0] && $a2 <= [lindex $area 2] && $a1 >= [lindex $area 1] && $a1 <= [lindex $area 3])} {continue}
-	        if {$a2 > [lindex $l1_str 2] || $a2 < [lindex $l1_str 0]} {continue}
-	        if {$a1 > [lindex $l2_str 2] || $a1 < [lindex $l2_str 1]} {continue}
+                    # Ignore if outside the area
+                    if {!($a2 >= [lindex $area 0] && $a2 <= [lindex $area 2] && $a1 >= [lindex $area 1] && $a1 <= [lindex $area 3])} {continue}
+	            if {$a2 > [lindex $l1_str 2] || $a2 < [lindex $l1_str 0]} {continue}
+	            if {$a1 > [lindex $l2_str 2] || $a1 < [lindex $l2_str 1]} {continue}
 
-                if {[lindex $l2_str 1] == [lindex $area 3]} {continue}
-                if {[lindex $l2_str 2] == [lindex $area 1]} {continue}
+                    if {[lindex $l2_str 1] == [lindex $area 3]} {continue}
+                    if {[lindex $l2_str 2] == [lindex $area 1]} {continue}
 
-                #loop over each blockage geometry (macros are blockages)
-		foreach blk1 $blockage {
-		    set b1 [get_instance_llx $blk1]
-		    set b2 [get_instance_lly $blk1]
-		    set b3 [get_instance_urx $blk1]
-		    set b4 [get_instance_ury $blk1]
-		    ## Check if stripes are to be blocked on these blockages (blockages are specific to each layer). If yes, do not drop vias
-		    if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
-			if {($a2 > $b1 && $a2 < $b3 && $a1 > $b2 && $a1 < $b4 ) } {
-			    set flag 0
-                            break
-			} 
-			if {$a2 > $b1 && $a2 < $b3 && $a1 == $b2 && $a1 == [lindex $area 1]} {
-			    set flag 0
-                            break
-			} 
-			if {$a2 > $b1 && $a2 < $b3 && $a1 == $b4 && $a1 == [lindex $area 3]} {
-			    set flag 0
-                            break
-			} 
+                    #loop over each blockage geometry (macros are blockages)
+		    foreach blk1 $blockage {
+		        set b1 [get_instance_llx $blk1]
+		        set b2 [get_instance_lly $blk1]
+		        set b3 [get_instance_urx $blk1]
+		        set b4 [get_instance_ury $blk1]
+		        ## Check if stripes are to be blocked on these blockages (blockages are specific to each layer). If yes, do not drop vias
+		        if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
+			    if {($a2 > $b1 && $a2 < $b3 && $a1 > $b2 && $a1 < $b4 ) } {
+			        set flag 0
+                                break
+			    } 
+			    if {$a2 > $b1 && $a2 < $b3 && $a1 == $b2 && $a1 == [lindex $area 1]} {
+			        set flag 0
+                                break
+			    } 
+			    if {$a2 > $b1 && $a2 < $b3 && $a1 == $b4 && $a1 == [lindex $area 3]} {
+			        set flag 0
+                                break
+			    } 
+		        }
 		    }
-		}
 
-		if {$flag == 1} {
-                    ## if no blockage restriction, append intersecting points to this "intersections"
-                    if {[regexp {.*_PIN_(hor|ver)} $l1 - dir]} {
-                        set layer1_width [lindex $l1_str 3] ; # Already in def units
-                    }
-                    set rule_name ${l1}${layer2}_${layer2_width}x${layer1_width}
-                    if {![dict exists $logical_viarules $rule_name]} {
-                        dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer2_width} height ${layer1_width}]
-                    }
-		    lappend intersections "rule $rule_name x $a2 y $a1"
-		}
-	    }
-        }
-
-    } elseif {$layer1_direction == "ver" && [get_dir $l2] == "hor"} {
-        ##Second case of orthogonal intersection, similar criteria as above, but just flip of coordinates to find intersections
-	foreach l1_str $orig_stripe_locs($l1,$tag) {
-	    set n1  [expr {[lindex $l1_str 0]}]
-            
-	    foreach l2_str $orig_stripe_locs($l2,$tag) {
-		set flag 1
-		set n2	[expr {[lindex $l2_str 1]}]
-                
-                # Ignore if outside the area
-                if {!($n1 >= [lindex $area 0] && $n1 <= [lindex $area 2] && $n2 >= [lindex $area 1] && $n2 <= [lindex $area 3])} {continue}
-	        if {$n2 > [lindex $l1_str 2] || $n2 < [lindex $l1_str 1]} {continue}
-	        if {$n1 > [lindex $l2_str 2] || $n1 < [lindex $l2_str 0]} {continue}
-			
-		foreach blk1 $blockage {
-			set b1 [get_instance_llx $blk1]
-			set b2 [get_instance_lly $blk1]
-			set b3 [get_instance_urx $blk1]
-			set b4 [get_instance_ury $blk1]
-			if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
-				if {($n1 >= $b1 && $n1 <= $b3 && $n2 >= $b2 && $n2 <= $b4)} {
-					set flag 0	
-				}
-			}
-		}
-
-		if {$flag == 1} {
+		    if {$flag == 1} {
                         ## if no blockage restriction, append intersecting points to this "intersections"
                         if {[regexp {.*_PIN_(hor|ver)} $l1 - dir]} {
                             set layer1_width [lindex $l1_str 3] ; # Already in def units
                         }
-                        set rule_name ${l1}${layer2}_${layer1_width}x${layer2_width}
+                        set rule_name ${l1}${layer2}_${layer2_width}x${layer1_width}
                         if {![dict exists $logical_viarules $rule_name]} {
-                            dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer1_width} height ${layer2_width}]
+                            dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer2_width} height ${layer1_width}]
                         }
-			lappend intersections "rule $rule_name x $n1 y $n2"
-		}
+		        lappend intersections "rule $rule_name x $a2 y $a1"
+		    }
+	        }
+            }
+        }
+
+    } elseif {$layer1_direction == "ver" && [get_dir $l2] == "hor"} {
+        ##Second case of orthogonal intersection, similar criteria as above, but just flip of coordinates to find intersections
+        if {[array names orig_stripe_locs "$l1,$tag"] != ""} {
+            ## puts "Checking [llength $orig_stripe_locs($l1,$tag)] vertical   stripes on $l1, $tag"
+            ## puts "  versus [llength $orig_stripe_locs($l2,$tag)] horizontal stripes on $l2, $tag"
+            ## puts "     and [llength $blockage] blockages"
+	    foreach l1_str $orig_stripe_locs($l1,$tag) {
+	        set n1  [expr {[lindex $l1_str 0]}]
+
+	        foreach l2_str $orig_stripe_locs($l2,$tag) {
+		    set flag 1
+		    set n2	[expr {[lindex $l2_str 1]}]
+
+                    # Ignore if outside the area
+                    if {!($n1 >= [lindex $area 0] && $n1 <= [lindex $area 2] && $n2 >= [lindex $area 1] && $n2 <= [lindex $area 3])} {continue}
+	            if {$n2 > [lindex $l1_str 2] || $n2 < [lindex $l1_str 1]} {continue}
+	            if {$n1 > [lindex $l2_str 2] || $n1 < [lindex $l2_str 0]} {continue}
+
+		    foreach blk1 $blockage {
+			    set b1 [get_instance_llx $blk1]
+			    set b2 [get_instance_lly $blk1]
+			    set b3 [get_instance_urx $blk1]
+			    set b4 [get_instance_ury $blk1]
+			    if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
+				    if {($n1 >= $b1 && $n1 <= $b3 && $n2 >= $b2 && $n2 <= $b4)} {
+					    set flag 0	
+				    }
+			    }
+		    }
+
+		    if {$flag == 1} {
+                            ## if no blockage restriction, append intersecting points to this "intersections"
+                            if {[regexp {.*_PIN_(hor|ver)} $l1 - dir]} {
+                                set layer1_width [lindex $l1_str 3] ; # Already in def units
+                            }
+                            set rule_name ${l1}${layer2}_${layer1_width}x${layer2_width}
+                            if {![dict exists $logical_viarules $rule_name]} {
+                                dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer1_width} height ${layer2_width}]
+                            }
+			    lappend intersections "rule $rule_name x $n1 y $n2"
+		    }
 
 
-	    }
+	        }
+            }
         }
     } else { 
 	#Check if stripes have orthogonal intersections. If not, exit
@@ -624,7 +634,7 @@ proc generate_stripes_vias {tag net_name grid_data} {
         set area [dict get $grid_data area]
         set blockage [dict get $grid_data blockage]
 
-	##puts -nonewline "Adding stripes for $net_name ..."
+	## puts "Adding stripes for $net_name ..."
 	foreach lay [dict keys [dict get $grid_data layers]] {
 
 	    if {$lay == [get_rails_layer]} {
@@ -657,7 +667,7 @@ proc generate_stripes_vias {tag net_name grid_data} {
 	}
 
 	#Via stacks
-	##puts -nonewline "Adding vias for $net_name ..."
+	## puts "Adding vias for $net_name ([llength [dict get $grid_data connect]] connections)..."
 	foreach tuple [dict get $grid_data connect] {
 		set l1 [lindex $tuple 0]
 		set l2 [lindex $tuple 1]

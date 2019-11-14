@@ -31,14 +31,20 @@ namespace eval ::pdn {
 
         foreach lib $libs {
             foreach cell [$lib getMasters] {
-                if {[$cell getType] == "CORE"} {break}
-                if {[$cell getType] == "IO"} {break}
-                if {[$cell getType] == "ENDCAP"} {break}
-    
-                set height [$cell getHeight]
-                set width  [$cell getWidth]
+                if {[$cell getType] == "CORE"} {continue}
+                if {[$cell getType] == "IO"} {continue}
+                if {[$cell getType] == "SPACER"} {continue}
+                if {[$cell getType] == "NONE"} {continue}
+                if {[$cell getType] == "ENDCAP_PRE"} {continue}
+                if {[$cell getType] == "ENDCAP"} {continue}
+                if {[$cell getType] == "CORE_SPACER"} {continue}
+                if {[$cell getType] == "CORE_TIEHIGH"} {continue}
+                if {[$cell getType] == "CORE_TIELOW"} {continue}
 
-                dict set macros [$cell getName] [list width $width height $height]
+                dict set macros [$cell getName] [list \
+                    width  [$cell getWidth] \
+                    height [$cell getHeight] \
+                ]
             }
         }
 
@@ -46,20 +52,11 @@ namespace eval ::pdn {
 
         foreach instance [dict keys $instances] {
             set macro_name [dict get $instances $instance macro]
-            set width  [expr [dict get $macros $macro_name width] * $dbu]
-            set height [expr [dict get $macros $macro_name height] *$dbu]
 
-            set llx [dict get $instances $instance x]
-            set lly [dict get $instances $instance y]
-
-            set orient [dict get $instances $instance orient]    
-            if {$orient == "N" || $orient == "FN" || $orient == "S" || $orient == "FS"} { 
-                set urx [expr round($llx + $width)]
-                set ury [expr round($lly + $height)]
-            } elseif {$orient == "W" || $orient == "FW" || $orient == "E" || $orient == "FE"} { 
-                set urx [expr round($llx + $height)]
-                set ury [expr round($lly + $width)]
-            }
+            set llx [dict get $instances $instance xmin]
+            set lly [dict get $instances $instance ymin]
+            set urx [dict get $instances $instance xmax]
+            set ury [dict get $instances $instance ymax]
 
             dict set instances $instance macro_boundary [list $llx $lly $urx $ury]
 
@@ -86,10 +83,19 @@ namespace eval ::pdn {
                 dict set data macro $macro_name
                 dict set data x [lindex [$inst getOrigin] 0]
                 dict set data y [lindex [$inst getOrigin] 1]
+                dict set data xmin [[$inst getBBox] xMin]
+                dict set data ymin [[$inst getBBox] yMin]
+                dict set data xmax [[$inst getBBox] xMax]
+                dict set data ymax [[$inst getBBox] yMax]
                 dict set data orient [$inst getOrient]
 
-                if {[$inst getHalo] != ""} {
-                    dict set data halo [$inst getHalo]
+                if {[$inst getHalo] != "NULL"} {
+                    dict set data halo [list \
+                        [[$inst getHalo] xMin] \
+                        [[$inst getHalo] yMin] \
+                        [[$inst getHalo] xMax] \
+                        [[$inst getHalo] yMax] \
+                    ]
                 } else {
                     dict set data halo [dict get $design_data config default_halo]
                 }

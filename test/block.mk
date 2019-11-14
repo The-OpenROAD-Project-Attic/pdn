@@ -1,5 +1,5 @@
 check: $(BLOCK)_pdn.def
-	diff -q $< $(BLOCK)_pdn.check
+	@diff -q $< $(BLOCK)_pdn.check && echo "Success"
 
 test: $(BLOCK)_pdn.def
 
