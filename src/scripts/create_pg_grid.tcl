@@ -246,6 +246,23 @@ namespace eval ::pdn {
         }
 
         ########################################
+        # Remove existing rows
+        #######################################
+        foreach row [$block getRows] {
+            dbRow_destroy $row
+        }
+
+        ########################################
+        # Remove existing power/ground nets
+        #######################################
+        foreach pg_net [concat [dict get $design_data power_nets] [dict get $design_data ground_nets]] {
+            set net [$block findNet $pg_net]
+            if {$net != "NULL"} {
+                dbNet_destroy $net
+            }
+        }
+
+        ########################################
         # Creating blockages based on macro locations
         #######################################
         pdn read_macro_boundaries
