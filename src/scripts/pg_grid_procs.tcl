@@ -1,6 +1,7 @@
 namespace eval ::pdn {
 
     variable logical_viarules {}
+    variable physical_viarules {}
     variable vias {}
     variable stripe_locs
     variable orig_stripe_locs
@@ -9,12 +10,18 @@ namespace eval ::pdn {
 #This file contains procedures that are used for PDN generation
 
     proc get_dir {layer_name} {
+        variable metal_layers 
+        variable metal_layers_dir 
         if {[regexp {.*_PIN_(hor|ver)} $layer_name - dir]} {
             return $dir
         }
         
-        set idx [lsearch [get_metal_layers] $layer_name]
-        return [lindex $::met_layer_dir $idx]
+        set idx [lsearch $metal_layers $layer_name]
+        if {[lindex $metal_layers_dir $idx] == "HORIZONTAL"} {
+            return "hor"
+        } else {
+            return "ver"
+        }
     }
     
     proc get_rails_layer {} {
@@ -23,25 +30,20 @@ namespace eval ::pdn {
         return [dict get $default_grid_data rails]
     }
 
-    proc convert_viarules_to_def_units {} {
-        global via_tech
+    proc init_via_tech {} {
+        variable tech
         variable def_via_tech
         
-        dict for {rule_name rule} $via_tech {
-            dict set def_via_tech $rule_name [list \
-                lower [list \
-                    layer [dict get $rule lower layer] \
-                    enclosure [lmap x [dict get $rule lower enclosure] {expr round($x * $::def_units)}] \
-                ] \
-                upper [list \
-                    layer [dict get $rule upper layer] \
-                    enclosure [lmap x [dict get $rule upper enclosure] {expr round($x * $::def_units)}] \
-                ] \
-                cut [list \
-                    layer [dict get $rule cut layer] \
-                    size [lmap x [dict get $rule cut size] {expr round($x * $::def_units)}] \
-                    spacing [lmap x [dict get $rule cut spacing] {expr round($x * $::def_units)}] \
-                ] \
+        set def_via_tech {}
+        foreach via_rule [$tech getViaGenerateRules] {
+            set lower [$via_rule getViaLayerRule 0]
+            set upper [$via_rule getViaLayerRule 1]
+            set cut   [$via_rule getViaLayerRule 2]
+
+	    dict set def_via_tech [$via_rule getName] [list \
+                lower [list layer [[$lower getLayer] getName] enclosure [$lower getEnclosure]] \
+                upper [list layer [[$upper getLayer] getName] enclosure [$upper getEnclosure]] \
+                cut   [list layer [[$cut getLayer] getName] spacing [$cut getSpacing] size [list [[$cut getRect] dx] [[$cut getRect] dy]]] \
             ]
         }
     }
@@ -49,10 +51,6 @@ namespace eval ::pdn {
     proc select_viainfo {lower} {
         variable def_via_tech
 
-        if {$def_via_tech == {}} {
-            convert_viarules_to_def_units
-        }
-        
         set layer_name $lower
         regexp {(.*)_PIN} $lower - layer_name
         
@@ -106,15 +104,24 @@ namespace eval ::pdn {
         set upper_width  [get_adjusted_width [dict get $via_info upper layer] $width]
         set upper_height [get_adjusted_width [dict get $via_info upper layer] $height]
         
-        set lower_enclosure [expr min([join [dict get $via_info lower enclosure] ","])]
-        set upper_enclosure [expr min([join [dict get $via_info upper enclosure] ","])]
-        set max_lower_enclosure [expr max([join [dict get $via_info lower enclosure] ","])]
-        set max_upper_enclosure [expr max([join [dict get $via_info upper enclosure] ","])]
+        set lower_enclosure [lindex [dict get $via_info lower enclosure] 0]
+        set max_lower_enclosure [lindex [dict get $via_info lower enclosure] 1]
+        
+        if {$max_lower_enclosure < $lower_enclosure} {
+            set swap $lower_enclosure
+            set lower_enclosure $max_lower_enclosure
+            set max_lower_enclosure $swap
+        }
 
-if {$rule_name == "A4_Ax_RULE"} {
-    puts "[dict get $via_info lower layer] Width $width -> $lower_width, Height $height -> $lower_height"
-    puts "[dict get $via_info upper layer] Width $width -> $upper_width, Height $height -> $upper_height"
-}
+        set upper_enclosure [lindex [dict get $via_info upper enclosure] 0]
+        set max_upper_enclosure [lindex [dict get $via_info upper enclosure] 1]
+
+        if {$max_upper_enclosure < $upper_enclosure} {
+            set swap $upper_enclosure
+            set upper_enclosure $max_upper_enclosure
+            set max_upper_enclosure $swap
+        }
+        
         # What are the maximum number of rows and columns that we can fit in this space?
         set i 0
         set via_width_lower 0
@@ -152,17 +159,14 @@ if {$rule_name == "A4_Ax_RULE"} {
         set max_lower_enclosure [expr round(($lower_size_max_enclosure  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
         set max_upper_enclosure [expr round(($upper_size_max_enclosure  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)]
 
-if {$rule_name == "A4_Ax_RULE"} {
-    puts "lower_enc_width  $lower_enc_width  round(($lower_width  - ($cut_width   + $xcut_pitch * ($columns - 1))) / 2)"
-    puts "lower_enc_height $lower_enc_height "
-    puts "upper_enc_width  $upper_enc_width  "
-    puts "upper_enc_height $upper_enc_height "
-}
         # Use the largest value of enclosure in the direction of the layer
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {$lower_dir == "hor"} {
             if {$lower_enc_height < $max_lower_enclosure} {
-                set xBotEnc [expr max($max_lower_enclosure,$lower_enc_width)]
+                set xBotEnc $max_lower_enclosure
+                if {$lower_enc_width > $xBotEnc} {
+                    set xBotEnc $lower_enc_width
+                }
             } else {
                 set xBotEnc $lower_enc_width
             }
@@ -170,21 +174,23 @@ if {$rule_name == "A4_Ax_RULE"} {
         } else {
             set xBotEnc $lower_enc_width
             if {$lower_enc_width < $max_lower_enclosure} {
-                set yBotEnc [expr max($max_lower_enclosure,$lower_enc_height)]
+                set yBotEnc $max_lower_enclosure
+                if {$lower_enc_height > $yBotEnc} {
+                    set yBotEnc $lower_enc_height
+                }
             } else {
                 set yBotEnc $lower_enc_height
             }
         }
-if {$rule_name == "A4_Ax_RULE"} {
-puts "$lower_dir"
-    puts "xBotEnc $xBotEnc"
-    puts "lower_enc_width  $lower_enc_width "
-}
+
         # Use the largest value of enclosure in the direction of the layer
         # Use the smallest value of enclosure perpendicular to direction of the layer
 	if {[get_dir [dict get $via_info upper layer]] == "hor"} {
             if {$upper_enc_height < $max_upper_enclosure} {
-                set xTopEnc [expr max($max_upper_enclosure,$upper_enc_width)]
+                set xTopEnc $max_upper_enclosure
+                if {$upper_enc_width > $xTopEnc} {
+                    set xTopEnc $upper_enc_width
+                }
             } else {
                 set xTopEnc $upper_enc_width
             }
@@ -192,23 +198,23 @@ puts "$lower_dir"
         } else {
             set xTopEnc $upper_enc_width
             if {$upper_enc_width < $max_upper_enclosure} {
-                set yTopEnc [expr max($max_upper_enclosure,$upper_enc_height)]
+                set yTopEnc $max_upper_enclosure
+                if {$upper_enc_height > $yTopEnc} {
+                    set yTopEnc $upper_enc_height
+                }
             } else {
                 set yTopEnc $upper_enc_height
             }
         }
         
-if {$rule_name == "A4_Ax_RULE"} {
-    puts "xBotEnc $xBotEnc"
-    puts "yBotEnc $yBotEnc"
-    puts "xTopEnc $xTopEnc"
-    puts "yTopEnc $yTopEnc"
-}
         set rule [list \
             rule $rule_name \
             cutsize [dict get $via_info cut size] \
             layers [list [dict get $via_info lower layer] [dict get $via_info cut layer] [dict get $via_info upper layer]] \
-            cutspacing [lmap spacing [dict get $via_info cut spacing] size [dict get $via_info cut size] {expr $spacing - $size}] \
+            cutspacing [list \
+                [expr [lindex [dict get $via_info cut spacing] 0] - [lindex [dict get $via_info cut size] 0]] \
+                [expr [lindex [dict get $via_info cut spacing] 1] - [lindex [dict get $via_info cut size] 1]] \
+            ] \
             rowcol [list $rows $columns] \
             enclosure [list $xBotEnc $yBotEnc $xTopEnc $yTopEnc] \
         ]
@@ -264,14 +270,15 @@ if {$rule_name == "A4_Ax_RULE"} {
     proc generate_vias {layer1 layer2 intersections} {
         variable logical_viarules
         variable physical_viarules
+        variable metal_layers
 
         set vias {}
         set layer1_name $layer1
         set layer2_name $layer2
         regexp {(.*)_PIN_(hor|ver)} $layer1 - layer1_name layer1_direction
         
-        set i1 [lsearch [get_metal_layers] $layer1_name]
-        set i2 [lsearch [get_metal_layers] $layer2_name]
+        set i1 [lsearch $metal_layers $layer1_name]
+        set i2 [lsearch $metal_layers $layer2_name]
         if {$i1 == -1} {puts "Layer1 [dict get $connect layer1], Layer2 $layer2"; exit -1}
         if {$i2 == -1} {puts "Layer1 [dict get $connect layer1], Layer2 $layer2"; exit -1}
 
@@ -289,7 +296,7 @@ if {$rule_name == "A4_Ax_RULE"} {
             set width  [dict get $logical_rule width]
             set height  [dict get $logical_rule height]
             
-            set connection_layers [list $layer1 {*}[lrange [get_metal_layers] [expr $i1 + 1] [expr $i2 - 1]]]
+            set connection_layers [list $layer1 {*}[lrange $metal_layers [expr $i1 + 1] [expr $i2 - 1]]]
 	    foreach lay $connection_layers {
                 set via_name [get_via $lay $x $y $width $height]
 
@@ -305,7 +312,8 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     variable logical_viarules
     variable default_grid_data
     variable orig_stripe_locs
-
+    variable def_units
+    
     set blockage [dict get $grid_data blockage]
     set area [dict get $grid_data area]
     
@@ -317,7 +325,7 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     if {[dict exists $grid_data layers $layer1]} {
         set layer1_direction [get_dir $layer1]
         set layer1_width [dict get $grid_data layers $layer1 width]
-        set layer1_width [expr round($layer1_width * $::def_units)]
+        set layer1_width [expr round($layer1_width * $def_units)]
     } elseif {[regexp {(.*)_PIN_(hor|ver)} $l1 - layer1 layer1_direction]} {
         #
     } else {
@@ -327,10 +335,10 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     set layer2 $l2
     if {[dict exists $grid_data layers $layer2]} {
         set layer2_width [dict get $grid_data layers $layer2 width]
-        set layer2_width [expr round($layer2_width * $::def_units)]
+        set layer2_width [expr round($layer2_width * $def_units)]
     } elseif {[dict exists $default_grid_data layers $layer2]} {
         set layer2_width [dict get $default_grid_data layers $layer2 width]
-        set layer2_width [expr round($layer2_width * $::def_units)]
+        set layer2_width [expr round($layer2_width * $def_units)]
     } else {
         puts "No width information available for layer $layer2"
     }
@@ -339,99 +347,109 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
     
     if {$layer1_direction == "hor" && [get_dir $l2] == "ver"} {
 
-        #loop over each stripe of layer 1 and layer 2 
-	foreach l1_str $orig_stripe_locs($l1,$tag) {
-	    set a1  [expr {[lindex $l1_str 1]}]
+        if {[array names orig_stripe_locs "$l1,$tag"] != ""} {
+            ## puts "Checking [llength $orig_stripe_locs($l1,$tag)] horizontal stripes on $l1, $tag"
+            ## puts "  versus [llength $orig_stripe_locs($l2,$tag)] vertical   stripes on $l2, $tag"
+            ## puts "     and [llength $blockage] blockages"
+            #loop over each stripe of layer 1 and layer 2 
+	    foreach l1_str $orig_stripe_locs($l1,$tag) {
+	        set a1  [expr {[lindex $l1_str 1]}]
 
-	    foreach l2_str $orig_stripe_locs($l2,$tag) {
-		set flag 1
-		set a2	[expr {[lindex $l2_str 0]}]
+	        foreach l2_str $orig_stripe_locs($l2,$tag) {
+		    set flag 1
+		    set a2	[expr {[lindex $l2_str 0]}]
 
-                # Ignore if outside the area
-                if {!($a2 >= [lindex $area 0] && $a2 <= [lindex $area 2] && $a1 >= [lindex $area 1] && $a1 <= [lindex $area 3])} {continue}
-	        if {$a2 > [lindex $l1_str 2] || $a2 < [lindex $l1_str 0]} {continue}
-	        if {$a1 > [lindex $l2_str 2] || $a1 < [lindex $l2_str 1]} {continue}
+                    # Ignore if outside the area
+                    if {!($a2 >= [lindex $area 0] && $a2 <= [lindex $area 2] && $a1 >= [lindex $area 1] && $a1 <= [lindex $area 3])} {continue}
+	            if {$a2 > [lindex $l1_str 2] || $a2 < [lindex $l1_str 0]} {continue}
+	            if {$a1 > [lindex $l2_str 2] || $a1 < [lindex $l2_str 1]} {continue}
 
-                if {[lindex $l2_str 1] == [lindex $area 3]} {continue}
-                if {[lindex $l2_str 2] == [lindex $area 1]} {continue}
+                    if {[lindex $l2_str 1] == [lindex $area 3]} {continue}
+                    if {[lindex $l2_str 2] == [lindex $area 1]} {continue}
 
-                #loop over each blockage geometry (macros are blockages)
-		foreach blk1 $blockage {
-		    set b1 [get_instance_llx $blk1]
-		    set b2 [get_instance_lly $blk1]
-		    set b3 [get_instance_urx $blk1]
-		    set b4 [get_instance_ury $blk1]
-		    ## Check if stripes are to be blocked on these blockages (blockages are specific to each layer). If yes, do not drop vias
-		    if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
-			if {($a2 > $b1 && $a2 < $b3 && $a1 > $b2 && $a1 < $b4 ) } {
-			    set flag 0
-                            break
-			} 
-			if {$a2 > $b1 && $a2 < $b3 && $a1 == $b2 && $a1 == [lindex $area 1]} {
-			    set flag 0
-                            break
-			} 
-			if {$a2 > $b1 && $a2 < $b3 && $a1 == $b4 && $a1 == [lindex $area 3]} {
-			    set flag 0
-                            break
-			} 
+                    #loop over each blockage geometry (macros are blockages)
+		    foreach blk1 $blockage {
+		        set b1 [get_instance_llx $blk1]
+		        set b2 [get_instance_lly $blk1]
+		        set b3 [get_instance_urx $blk1]
+		        set b4 [get_instance_ury $blk1]
+		        ## Check if stripes are to be blocked on these blockages (blockages are specific to each layer). If yes, do not drop vias
+		        if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
+			    if {($a2 > $b1 && $a2 < $b3 && $a1 > $b2 && $a1 < $b4 ) } {
+			        set flag 0
+                                break
+			    } 
+			    if {$a2 > $b1 && $a2 < $b3 && $a1 == $b2 && $a1 == [lindex $area 1]} {
+			        set flag 0
+                                break
+			    } 
+			    if {$a2 > $b1 && $a2 < $b3 && $a1 == $b4 && $a1 == [lindex $area 3]} {
+			        set flag 0
+                                break
+			    } 
+		        }
 		    }
-		}
 
-		if {$flag == 1} {
-                    ## if no blockage restriction, append intersecting points to this "intersections"
-                    if {[regexp {.*_PIN_(hor|ver)} $l1 - dir]} {
-                        set layer1_width [lindex $l1_str 3] ; # Already in def units
-                    }
-                    set rule_name ${l1}${layer2}_${layer2_width}x${layer1_width}
-                    if {![dict exists $logical_viarules $rule_name]} {
-                        dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer2_width} height ${layer1_width}]
-                    }
-		    lappend intersections "rule $rule_name x $a2 y $a1"
-		}
-	    }
-        }
-
-    } elseif {$layer1_direction == "ver" && [get_dir $l2] == "hor"} {
-        ##Second case of orthogonal intersection, similar criteria as above, but just flip of coordinates to find intersections
-	foreach l1_str $orig_stripe_locs($l1,$tag) {
-	    set n1  [expr {[lindex $l1_str 0]}]
-            
-	    foreach l2_str $orig_stripe_locs($l2,$tag) {
-		set flag 1
-		set n2	[expr {[lindex $l2_str 1]}]
-                
-                # Ignore if outside the area
-                if {!($n1 >= [lindex $area 0] && $n1 <= [lindex $area 2] && $n2 >= [lindex $area 1] && $n2 <= [lindex $area 3])} {continue}
-	        if {$n2 > [lindex $l1_str 2] || $n2 < [lindex $l1_str 1]} {continue}
-	        if {$n1 > [lindex $l2_str 2] || $n1 < [lindex $l2_str 0]} {continue}
-			
-		foreach blk1 $blockage {
-			set b1 [get_instance_llx $blk1]
-			set b2 [get_instance_lly $blk1]
-			set b3 [get_instance_urx $blk1]
-			set b4 [get_instance_ury $blk1]
-			if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
-				if {($n1 >= $b1 && $n1 <= $b3 && $n2 >= $b2 && $n2 <= $b4)} {
-					set flag 0	
-				}
-			}
-		}
-
-		if {$flag == 1} {
+		    if {$flag == 1} {
                         ## if no blockage restriction, append intersecting points to this "intersections"
                         if {[regexp {.*_PIN_(hor|ver)} $l1 - dir]} {
                             set layer1_width [lindex $l1_str 3] ; # Already in def units
                         }
-                        set rule_name ${l1}${layer2}_${layer1_width}x${layer2_width}
+                        set rule_name ${l1}${layer2}_${layer2_width}x${layer1_width}
                         if {![dict exists $logical_viarules $rule_name]} {
-                            dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer1_width} height ${layer2_width}]
+                            dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer2_width} height ${layer1_width}]
                         }
-			lappend intersections "rule $rule_name x $n1 y $n2"
-		}
+		        lappend intersections "rule $rule_name x $a2 y $a1"
+		    }
+	        }
+            }
+        }
+
+    } elseif {$layer1_direction == "ver" && [get_dir $l2] == "hor"} {
+        ##Second case of orthogonal intersection, similar criteria as above, but just flip of coordinates to find intersections
+        if {[array names orig_stripe_locs "$l1,$tag"] != ""} {
+            ## puts "Checking [llength $orig_stripe_locs($l1,$tag)] vertical   stripes on $l1, $tag"
+            ## puts "  versus [llength $orig_stripe_locs($l2,$tag)] horizontal stripes on $l2, $tag"
+            ## puts "     and [llength $blockage] blockages"
+	    foreach l1_str $orig_stripe_locs($l1,$tag) {
+	        set n1  [expr {[lindex $l1_str 0]}]
+
+	        foreach l2_str $orig_stripe_locs($l2,$tag) {
+		    set flag 1
+		    set n2	[expr {[lindex $l2_str 1]}]
+
+                    # Ignore if outside the area
+                    if {!($n1 >= [lindex $area 0] && $n1 <= [lindex $area 2] && $n2 >= [lindex $area 1] && $n2 <= [lindex $area 3])} {continue}
+	            if {$n2 > [lindex $l1_str 2] || $n2 < [lindex $l1_str 1]} {continue}
+	            if {$n1 > [lindex $l2_str 2] || $n1 < [lindex $l2_str 0]} {continue}
+
+		    foreach blk1 $blockage {
+			    set b1 [get_instance_llx $blk1]
+			    set b2 [get_instance_lly $blk1]
+			    set b3 [get_instance_urx $blk1]
+			    set b4 [get_instance_ury $blk1]
+			    if {  [lsearch [get_macro_blockage_layers $blk1] $l1] >= 0 || [lsearch [get_macro_blockage_layers $blk1] $l2] >= 0 } {
+				    if {($n1 >= $b1 && $n1 <= $b3 && $n2 >= $b2 && $n2 <= $b4)} {
+					    set flag 0	
+				    }
+			    }
+		    }
+
+		    if {$flag == 1} {
+                            ## if no blockage restriction, append intersecting points to this "intersections"
+                            if {[regexp {.*_PIN_(hor|ver)} $l1 - dir]} {
+                                set layer1_width [lindex $l1_str 3] ; # Already in def units
+                            }
+                            set rule_name ${l1}${layer2}_${layer1_width}x${layer2_width}
+                            if {![dict exists $logical_viarules $rule_name]} {
+                                dict set logical_viarules $rule_name [list lower $l1 upper $layer2 width ${layer1_width} height ${layer2_width}]
+                            }
+			    lappend intersections "rule $rule_name x $n1 y $n2"
+		    }
 
 
-	    }
+	        }
+            }
         }
     } else { 
 	#Check if stripes have orthogonal intersections. If not, exit
@@ -449,21 +467,23 @@ proc generate_via_stacks {l1 l2 tag grid_data} {
 proc generate_lower_metal_followpin_rails {tag area} {
     variable orig_stripe_locs
     variable stripe_locs
+    variable row_height
+    variable rails_start_with
 
 	#Assumes horizontal stripes
 	set lay [get_rails_layer]
 
-	if {$tag == $::rails_start_with} { ;#If starting from bottom with this net, 
+	if {$tag == $rails_start_with} { ;#If starting from bottom with this net, 
 		set lly [lindex $area 1]
 	} else {
-		set lly [expr {[lindex $area 1] + $::row_height}]
+		set lly [expr {[lindex $area 1] + $row_height}]
 	}
 	lappend stripe_locs($lay,$tag) "[lindex $area 0] $lly [lindex $area 2]"
 	lappend orig_stripe_locs($lay,$tag) "[lindex $area 0] $lly [lindex $area 2]"
 
 
 	#Rail every alternate rows - Assuming horizontal rows and full width rails
-	for {set y [expr {$lly + (2 * $::row_height)}]} {$y <= [lindex $area 3]} {set y [expr {$y + (2 * $::row_height)}]} {
+	for {set y [expr {$lly + (2 * $row_height)}]} {$y <= [lindex $area 3]} {set y [expr {$y + (2 * $row_height)}]} {
 	    lappend stripe_locs($lay,$tag) "[lindex $area 0] $y [lindex $area 2]"
 	    lappend orig_stripe_locs($lay,$tag) "[lindex $area 0] $y [lindex $area 2]"
 	}
@@ -478,10 +498,11 @@ proc generate_upper_metal_mesh_stripes {tag layer area} {
     variable boffset
     variable orig_stripe_locs
     variable stripe_locs
-
+    variable stripes_start_with
+    
 	if {[get_dir $layer] == "hor"} {
 		set offset [expr [lindex $area 1] + $boffset($layer)]
-		if {$tag != $::stripes_start_with} { ;#If not starting from bottom with this net, 
+		if {$tag != $stripes_start_with} { ;#If not starting from bottom with this net, 
 			set offset [expr {$offset + ($pitches($layer) / 2)}]
 		}
 		for {set y $offset} {$y < [expr {[lindex $area 3] - $widths($layer)}]} {set y [expr {$pitches($layer) + $y}]} {
@@ -491,7 +512,7 @@ proc generate_upper_metal_mesh_stripes {tag layer area} {
 	} elseif {[get_dir $layer] == "ver"} {
 		set offset [expr [lindex $area 0] + $loffset($layer)]
 
-		if {$tag != $::stripes_start_with} { ;#If not starting from bottom with this net, 
+		if {$tag != $stripes_start_with} { ;#If not starting from bottom with this net, 
 			set offset [expr {$offset + ($pitches($layer) / 2)}]
 		}
 		for {set x $offset} {$x < [expr {[lindex $area 2] - $widths($layer)}]} {set x [expr {$pitches($layer) + $x}]} {
@@ -536,9 +557,17 @@ proc location_stripe_blockage {loc1 loc2 loc3 lay area tag b1 b2 b3 b4} {
 		##Check if stripe is passing through blockage
 		##puts "HORIZONTAL BLOCKAGE "
 		set x1 $loc1
-		set y1 [expr max($loc2 - $widths($lay)/2, [lindex $area 1])]
+                set y1 [expr $loc2 - $widths($lay)/2]
+                if {[lindex $area 1] > $y1} {
+                    set y1 [lindex $area 1]
+                }
+		set y1 [expr $loc2 - $widths($lay)/2]
 		set x2 $loc3
-		set y2 [expr min($y1 +  $widths($lay),[lindex $area 3])]
+                set y2 [expr $y1 +  $widths($lay)]
+                if {[lindex $area 3] < $y2} {
+                    set y2 [lindex $area 3]
+                }
+
                 #puts "segment:  [format {%9.1f %9.1f} $loc1 $loc3]"              
                 #puts "blockage: [format {%9.1f %9.1f} $b1 $b3]"
 		if {  ($y1 >= $b2) && ($y2 <= $b4) && ( ($x1 <= $b3 && $x2 >= $b3) || ($x1 <= $b1 && $x2 >= $b1)  || ($x1 <= $b1 && $x2 >= $b3) || ($x1 <= $b3 && $x2 >= $b1) )  } {
@@ -607,8 +636,9 @@ proc generate_stripes_vias {tag net_name grid_data} {
         set area [dict get $grid_data area]
         set blockage [dict get $grid_data blockage]
 
-	##puts -nonewline "Adding stripes for $net_name ..."
+	## puts "Adding stripes for $net_name ..."
 	foreach lay [dict keys [dict get $grid_data layers]] {
+	    ## puts "    Layer $lay ..."
 
 	    if {$lay == [get_rails_layer]} {
 	        #Std. cell rails
@@ -640,11 +670,11 @@ proc generate_stripes_vias {tag net_name grid_data} {
 	}
 
 	#Via stacks
-	##puts -nonewline "Adding vias for $net_name ..."
+	## puts "Adding vias for $net_name ([llength [dict get $grid_data connect]] connections)..."
 	foreach tuple [dict get $grid_data connect] {
 		set l1 [lindex $tuple 0]
 		set l2 [lindex $tuple 1]
-
+                ## puts "    $l1 to $l2"
                 set connections [generate_via_stacks $l1 $l2 $tag $grid_data]
 		lappend vias [list net_name $net_name connections $connections]
 	}

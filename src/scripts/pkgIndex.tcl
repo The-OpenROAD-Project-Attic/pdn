@@ -14,8 +14,8 @@ proc source_pdn {dir} {
     }
     source [file join $dir pg_grid_procs.tcl]
     source [file join $dir gen_blockage.tcl]
-    source [file join $dir def_writer.tcl]
+    source [file join $dir opendb_writer.tcl]
     source [file join $dir create_pg_grid.tcl]
 }
 
-package ifneeded pdn 0.2.0 [list source_pdn $dir]
+package ifneeded pdn 0.3.0 [list source_pdn $dir]

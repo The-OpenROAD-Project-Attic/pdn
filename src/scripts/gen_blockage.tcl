@@ -2,16 +2,6 @@ namespace eval ::pdn {
     variable macros {}
     variable instances {}
     
-    proc write_macrocell_list {file_name} {
-        variable macros
-        
-        set ch [open $file_name "w"]
-        foreach macro_name [dict keys $macros] {
-            puts $ch $macro_name
-        }
-        close $ch
-    }
-    
     proc get_macro_boundaries {} {
         variable instances
 
@@ -34,66 +24,45 @@ namespace eval ::pdn {
         return $boundaries
     }
     
-    proc read_macro_boundaries {def lef_files} {
+    proc read_macro_boundaries {} {
+        variable libs
         variable macros
         variable instances
-        
-        foreach file $lef_files {
-            set ch [open $file]
 
-            while {![eof $ch]} {
-                set line [gets $ch]
+        foreach lib $libs {
+            foreach cell [$lib getMasters] {
+                if {[$cell getType] == "CORE"} {continue}
+                if {[$cell getType] == "IO"} {continue}
+                if {[$cell getType] == "PAD"} {continue}
+                if {[$cell getType] == "PAD_SPACER"} {continue}
+                if {[$cell getType] == "SPACER"} {continue}
+                if {[$cell getType] == "NONE"} {continue}
+                if {[$cell getType] == "ENDCAP_PRE"} {continue}
+                if {[$cell getType] == "ENDCAP_BOTTOMLEFT"} {continue}
+                if {[$cell getType] == "ENDCAP_BOTTOMRIGHT"} {continue}
+                if {[$cell getType] == "ENDCAP_TOPLEFT"} {continue}
+                if {[$cell getType] == "ENDCAP_TOPRIGHT"} {continue}
+                if {[$cell getType] == "ENDCAP"} {continue}
+                if {[$cell getType] == "CORE_SPACER"} {continue}
+                if {[$cell getType] == "CORE_TIEHIGH"} {continue}
+                if {[$cell getType] == "CORE_TIELOW"} {continue}
 
-                if {[regexp {^s*MACRO ([^\s]*)} $line - macro_name]} {
-                    set reject 0
-                    while {![eof $ch]} {
-                        set line [gets $ch]
-                        if {[regexp "END $macro_name" $line]} {
-                            break
-                        }
-                        if {[regexp {^\s*CLASS CORE} $line]} {set reject 1}
-                        if {[regexp {^\s*CLASS IO} $line]} {set reject 1}
-                        if {[regexp {^\s*CLASS ENDCAP} $line]} {set reject 1}
-                        if {$reject == 1} {break}
-
-                        regexp {^\s*SIZE ([0-9\.]*) BY ([0-9\.]*)} $line - width height
-                    }
-                    if {$reject == 0} {
-                        dict set macros $macro_name [list width $width height $height]
-                    }
-                }
-            }
-            close $ch
-        }
-
-        set ch [open $def]
-        while {![eof $ch]} {
-            set line [gets $ch]
-
-            regexp {UNITS DISTANCE MICRONS ([0-9]*)} $line - dbu
-
-            if {[regexp {^COMPONENTS [0-9]*} $line]} {
-                set instances [read_def_components $ch [dict keys $macros]]
+                dict set macros [$cell getName] [list \
+                    width  [$cell getWidth] \
+                    height [$cell getHeight] \
+                ]
             }
         }
-        close $ch
+
+        set instances [read_def_components [dict keys $macros]]
 
         foreach instance [dict keys $instances] {
             set macro_name [dict get $instances $instance macro]
-            set width  [expr [dict get $macros $macro_name width] * $dbu]
-            set height [expr [dict get $macros $macro_name height] *$dbu]
 
-            set llx [dict get $instances $instance x]
-            set lly [dict get $instances $instance y]
-
-            set orient [dict get $instances $instance orient]    
-            if {$orient == "N" || $orient == "FN" || $orient == "S" || $orient == "FS"} { 
-                set urx [expr round($llx + $width)]
-                set ury [expr round($lly + $height)]
-            } elseif {$orient == "W" || $orient == "FW" || $orient == "E" || $orient == "FE"} { 
-                set urx [expr round($llx + $height)]
-                set ury [expr round($lly + $width)]
-            }
+            set llx [dict get $instances $instance xmin]
+            set lly [dict get $instances $instance ymin]
+            set urx [dict get $instances $instance xmax]
+            set ury [dict get $instances $instance ymax]
 
             dict set instances $instance macro_boundary [list $llx $lly $urx $ury]
 
@@ -107,39 +76,37 @@ namespace eval ::pdn {
         }
     }
 
-    proc read_def_components {ch macros} {
+    proc read_def_components {macros} {
         variable design_data
+        variable block
         set instances {}
 
-        while {![eof $ch]} {
-            set line [gets $ch]
-
-            if {[regexp {END COMPONENTS} $line]} {
-                return $instances
-            }
-
-            while {![regexp {;} $line]} {
-                set line "$line [gets $ch]"
-            }
-
-            set macro_name [lindex $line 2]
+        foreach inst [$block getInsts] {
+            set macro_name [[$inst getMaster] getName]
             if {[lsearch $macros $macro_name] != -1} {
                 set data {}
-                dict set data name [lindex $line 1]
-                if {[set idx [lsearch $line "FIXED"]] != -1} {
-                    dict set data macro $macro_name
-                    dict set data x [lindex $line [expr $idx + 2]]
-                    dict set data y [lindex $line [expr $idx + 3]]
-                    dict set data orient [lindex $line [expr $idx + 5]]
-                }
+                dict set data name [$inst getName]
+                dict set data macro $macro_name
+                dict set data x [lindex [$inst getOrigin] 0]
+                dict set data y [lindex [$inst getOrigin] 1]
+                dict set data xmin [[$inst getBBox] xMin]
+                dict set data ymin [[$inst getBBox] yMin]
+                dict set data xmax [[$inst getBBox] xMax]
+                dict set data ymax [[$inst getBBox] yMax]
+                dict set data orient [$inst getOrient]
 
-                if {[set idx [lsearch $line "HALO"]] != -1} {
-                    dict set data halo [lrange $line [expr $idx + 1] [expr $idx + 4]]
+                if {[$inst getHalo] != "NULL"} {
+                    dict set data halo [list \
+                        [[$inst getHalo] xMin] \
+                        [[$inst getHalo] yMin] \
+                        [[$inst getHalo] xMax] \
+                        [[$inst getHalo] yMax] \
+                    ]
                 } else {
                     dict set data halo [dict get $design_data config default_halo]
                 }
 
-                dict set instances [lindex $line 1] $data
+                dict set instances [$inst getName] $data
             }
         }
 

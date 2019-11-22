@@ -18,10 +18,10 @@ approve.% :
 	@$(MAKE) -C $* approve 
 
 clean: $(foreach block,$(TESTS),clean.$(block))
-	echo "Clean complete"
+	@echo "Clean complete"
 
 check: $(foreach block,$(TESTS),check.$(block))
-	echo "Checks complete"
+	@echo "Checks complete"
         
 $(TESTS) :
 	$(MAKE) -C $@ 
