@@ -70,7 +70,7 @@ namespace eval ::pdn {
     
     proc transform_box {xmin ymin xmax ymax origin orientation} {
         switch -exact $orientation {
-            R0    {set new_box [list $xmin $ymax $ymin $xmax]}
+            R0    {set new_box [list $xmin $ymin $xmax $ymax]}
             R90   {set new_box [list [expr -1 * $ymax] $xmin [expr -1 * $ymin] $xmax]}
             R180  {set new_box [list [expr -1 * $xmax] [expr -1 * $ymax] [expr -1 * $xmin] [expr -1 * $ymin]]}
             R270  {set new_box [list $ymin [expr -1 * $xmax] $ymax [expr -1 * $xmin]]}
@@ -98,9 +98,18 @@ namespace eval ::pdn {
 
             if {[$master getType] == "CORE"} {continue}
             if {[$master getType] == "IO"} {continue}
+            if {[$master getType] == "PAD"} {continue}
+            if {[$master getType] == "PAD_SPACER"} {continue}
             if {[$master getType] == "SPACER"} {continue}
             if {[$master getType] == "NONE"} {continue}
             if {[$master getType] == "ENDCAP_PRE"} {continue}
+            if {[$master getType] == "ENDCAP_BOTTOMLEFT"} {continue}
+            if {[$master getType] == "ENDCAP_BOTTOMRIGHT"} {continue}
+            if {[$master getType] == "ENDCAP_TOPLEFT"} {continue}
+            if {[$master getType] == "ENDCAP_TOPRIGHT"} {continue}
+            if {[$master getType] == "ENDCAP"} {continue}
+            if {[$master getType] == "ENDCAP"} {continue}
+            if {[$master getType] == "ENDCAP"} {continue}
             if {[$master getType] == "ENDCAP"} {continue}
             if {[$master getType] == "CORE_SPACER"} {continue}
             if {[$master getType] == "CORE_TIEHIGH"} {continue}
@@ -125,13 +134,13 @@ namespace eval ::pdn {
                             set xl [lindex $box 0]
                             set xu [lindex $box 2]
                             set y  [expr ([lindex $box 1] + [lindex $box 3])/2]
-                            set width [expr [lindex $box 3] - [lindex $box 1]]
+                            set width [expr abs([lindex $box 3] - [lindex $box 1])]
                             lappend orig_stripe_locs(${layer}_PIN_hor,$type) [list $xl $y $xu $width]
                         } else {
                             set x  [expr ([lindex $box 0] + [lindex $box 2])/2]
                             set yl [lindex $box 1]
                             set yu [lindex $box 3]
-                            set width [expr [lindex $box 2] - [lindex $box 0]]
+                            set width [expr abs([lindex $box 2] - [lindex $box 0])]
                             lappend orig_stripe_locs(${layer}_PIN_ver,$type) [list $x $yl $yu $width]
                         }
                     }
@@ -139,6 +148,12 @@ namespace eval ::pdn {
             }    
         }
 #        puts "Total walltime till macro pin geometry creation = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
+    }
+
+    proc set_core_area {xmin ymin xmax ymax} {
+        variable design_data
+
+        dict set design_data config core_area [list $xmin $ymin $xmax $ymax]
     }
 
     proc init {opendb_block {PDN_cfg "PDN.cfg"}} {
@@ -157,6 +172,8 @@ namespace eval ::pdn {
         variable site_name
         variable metal_layers
         variable def_units
+        variable stripes_start_with
+        variable rails_start_with
         
 #        set ::start_time [clock clicks -milliseconds]
         if {![-s $PDN_cfg]} {
@@ -188,6 +205,18 @@ namespace eval ::pdn {
             set ::ground_nets "VSS"
         }
 
+        if {[info vars ::stripes_start_with] == ""} {
+            set stripes_start_with "GROUND"
+        } else {
+            set stripes_start_with $::stripes_start_with
+        }
+        
+        if {[info vars ::rails_start_with] == ""} {
+            set rails_start_with "GROUND"
+        } else {
+            set rails_start_with $::rails_start_with
+        }
+        
         dict set design_data power_nets $::power_nets
         dict set design_data ground_nets $::ground_nets
 
@@ -232,14 +261,15 @@ namespace eval ::pdn {
             set default_halo "0 0 0 0"
         }
 
-        dict set design_data config [list \
-            def_output   $def_output \
-            design       $design_name \
-            core_area    [list $::core_area_llx $::core_area_lly $::core_area_urx $::core_area_ury] \
-            die_area     [list [$die_area xMin]  [$die_area yMin] [$die_area xMax] [$die_area yMax]] \
-            default_halo [lmap x $default_halo {expr $x * $def_units}] \
-        ]
+        dict set design_data config def_output   $def_output
+        dict set design_data config design       $design_name
+        dict set design_data config die_area     [list [$die_area xMin]  [$die_area yMin] [$die_area xMax] [$die_area yMax]]
+        dict set design_data config default_halo [lmap x $default_halo {expr $x * $def_units}]
                    
+        if {[info vars ::core_area_llx] != "" && [info vars ::core_area_lly] != "" && [info vars ::core_area_urx] != "" && [info vars ::core_area_ury] != ""} {
+             set_core_area [expr $::core_area_llx * $def_units] [expr $::core_area_lly * $def_units] [expr $::core_area_urx * $def_units] [expr $::core_area_ury * $def_units]
+        }
+        
         foreach lay $metal_layers { 
 	    set stripe_locs($lay,POWER) ""
 	    set stripe_locs($lay,GROUND) ""
@@ -286,11 +316,13 @@ namespace eval ::pdn {
     proc specify_grid {type specification} {
         variable design_data
 
-        set specification [list $specification]
+        set specifications {}
         if {[dict exists $design_data grid $type]} {
-            set specification [concat [dict get $design_data grid $type] $specification]
+            set specifications [dict get $design_data grid $type]
         }
-        dict set design_data grid $type $specification
+        lappend specifications $specification
+        
+        dict set design_data grid $type $specifications
     }
     
     proc add_grid {grid_data} {
@@ -312,11 +344,13 @@ namespace eval ::pdn {
         }
 
         ## Power nets
+        ## puts "Power straps"
         foreach pwr_net [dict get $design_data power_nets] {
 	    set tag "POWER"
 	    generate_stripes_vias $tag $pwr_net $grid_data
         }
         ## Ground nets
+        ## puts "Ground straps"
         foreach gnd_net [dict get $design_data ground_nets] {
 	    set tag "GROUND"
 	    generate_stripes_vias $tag $gnd_net $grid_data
@@ -473,23 +507,28 @@ namespace eval ::pdn {
         puts "**** END INFO ****"
 
         foreach specification [dict get $design_data grid stdcell] {
+            if {[dict exists $specification name]} {
+                puts "Inserting stdcell grid - [dict get $specification name]"
+            } else {
+                puts "Inserting stdcell grid"
+            }
             dict set specification blockage [dict keys $instances]
             if {![dict exists $specification area]} {
-                dict set specification area [lmap x [dict get $design_data config core_area] {expr round($x * $def_units)}]
+                dict set specification area [dict get $design_data config core_area]
             }
             pdn add_grid $specification
-            if {$default_grid_data == {}} {
-                set default_grid_data $specification
-            }
-
         }
         
-        foreach instance [dict keys $instances] {
-            pdn add_grid [get_instance_specification $instance]
+        if {[llength [dict keys $instances]] > 0} {
+            puts "Inserting macro grid for [llength [dict keys $instances]] macros"
+            foreach instance [dict keys $instances] {
+                pdn add_grid [get_instance_specification $instance]
+            }
         }
     }
     
     proc opendb_update_grid {} {
+        puts "Writing to database"
         write_opendb_vias
         write_opendb_specialnets
         write_opendb_rows
@@ -507,7 +546,7 @@ namespace eval ::pdn {
 #        puts "Total walltime to generate PDN DEF = [expr {[expr {[clock clicks -milliseconds] - $::start_time}]/1000.0}] seconds"
     }
 
-    namespace export init apply get_memory_instance_pg_pins 
+    namespace export init apply get_memory_instance_pg_pins opendb_update_grid set_core_area
     namespace export specify_grid plan_grid add_grid get
     namespace ensemble create
 }

@@ -1,4 +1,16 @@
 namespace eval ::pdn {
+    variable global_connections {
+        VDD {
+            {inst_name .* pin_name VDD}
+            {inst_name .* pin_name VDDPE}
+            {inst_name .* pin_name VDDCE}
+        }
+        VSS {
+            {inst_name .* pin_name VSS}
+            {inst_name .* pin_name VSSE}
+        }
+    }
+    
     proc write_opendb_vias {} {
         variable physical_viarules
         variable block
@@ -33,7 +45,8 @@ namespace eval ::pdn {
         variable tech 
         variable stripe_locs
         variable widths
-
+        variable global_connections
+        
         set net [$block findNet $net_name]
         if {$net == "NULL"} {
             set net [dbNet_create $block $net_name]
@@ -45,7 +58,12 @@ namespace eval ::pdn {
             set master [$inst getMaster]
             foreach mterm [$master getMTerms] {
                 if {[$mterm getSigType] == $signal_type} {
-                    dbITerm_connect $inst $net $mterm
+                    foreach pattern [dict get $global_connections $net_name] {
+                        if {[regexp [dict get $pattern inst_name] [$inst getName]] &&
+                            [regexp [dict get $pattern pin_name] [$mterm getName]]} {
+                            dbITerm_connect $inst $net $mterm
+                        }
+                    }
                 }
             }
             foreach iterm [$inst getITerms] {
@@ -68,9 +86,9 @@ namespace eval ::pdn {
                     set l3 [lindex $l_str 2]
                     if {$l1 == $l3} {continue}
                     if {$lay == [get_rails_layer]} {
-                        dbSBox_create $swire $layer $l1 [expr $l2 - ($widths($lay)/2)] $l3 [expr $l2 + ($widths($lay)/2)] "FOLLOWPIN"
+                        dbSBox_create $swire $layer [expr round($l1)] [expr round($l2 - ($widths($lay)/2))] [expr round($l3)] [expr round($l2 + ($widths($lay)/2))] "FOLLOWPIN"
                     } else {
-                        dbSBox_create $swire $layer $l1 [expr $l2 - ($widths($lay)/2)] $l3 [expr $l2 + ($widths($lay)/2)] "STRIPE"
+                        dbSBox_create $swire $layer [expr round($l1)] [expr round($l2 - ($widths($lay)/2))] [expr round($l3)] [expr round($l2 + ($widths($lay)/2))] "STRIPE"
                     }
 
                 }
@@ -81,9 +99,9 @@ namespace eval ::pdn {
                     set l3 [lindex $l_str 2]
                     if {$l2 == $l3} {continue}
                     if {$lay == [get_rails_layer]} {
-                        dbSBox_create $swire $layer [expr $l1 - ($widths($lay)/2)] $l2 [expr $l1 + ($widths($lay)/2)] $l3 "FOLLOWPIN"
+                        dbSBox_create $swire $layer [expr round($l1 - ($widths($lay)/2))] [expr round($l2)] [expr round($l1 + ($widths($lay)/2))] [expr round($l3)] "FOLLOWPIN"
                     } else {
-                        dbSBox_create $swire $layer [expr $l1 - ($widths($lay)/2)] $l2 [expr $l1 + ($widths($lay)/2)] $l3 "STRIPE"
+                        dbSBox_create $swire $layer [expr round($l1 - ($widths($lay)/2))] [expr round($l2)] [expr round($l1 + ($widths($lay)/2))] [expr round($l3)] "STRIPE"
                     }
                 }               
             }
@@ -123,9 +141,10 @@ namespace eval ::pdn {
     proc init_orientation {height} {
         variable lowest_rail
         variable orient_rows
-        
+        variable rails_start_with
+
         set lowest_rail $height
-        if {$::rails_start_with == "GROUND"} {
+        if {$rails_start_with == "GROUND"} {
             set orient_rows {0 "R0" 1 "MX"}
         } else {
             set orient_rows {0 "MX" 1 "R0"}
@@ -147,16 +166,19 @@ namespace eval ::pdn {
         variable site
         variable site_width
         variable def_units
-
+        variable design_data
+        
         set start  [expr int($start)]
         set height [expr int($height)]
         set end    [expr int($end)]
 
         if {$start == $end} {return}
-	if {[expr { int($start - ($::core_area_llx * $def_units)) % $site_width}] == 0} {
+        
+        set llx [lindex [dict get $design_data config core_area] 0]
+	if {[expr { int($start - $llx) % $site_width}] == 0} {
 		set x $start
 	} else {
-		set offset [expr { int($start - ($::core_area_llx * $def_units)) % $site_width}]
+		set offset [expr { int($start - $llx) % $site_width}]
 		set x [expr {$start + $site_width - $offset}]
 	}
 

@@ -33,9 +33,15 @@ namespace eval ::pdn {
             foreach cell [$lib getMasters] {
                 if {[$cell getType] == "CORE"} {continue}
                 if {[$cell getType] == "IO"} {continue}
+                if {[$cell getType] == "PAD"} {continue}
+                if {[$cell getType] == "PAD_SPACER"} {continue}
                 if {[$cell getType] == "SPACER"} {continue}
                 if {[$cell getType] == "NONE"} {continue}
                 if {[$cell getType] == "ENDCAP_PRE"} {continue}
+                if {[$cell getType] == "ENDCAP_BOTTOMLEFT"} {continue}
+                if {[$cell getType] == "ENDCAP_BOTTOMRIGHT"} {continue}
+                if {[$cell getType] == "ENDCAP_TOPLEFT"} {continue}
+                if {[$cell getType] == "ENDCAP_TOPRIGHT"} {continue}
                 if {[$cell getType] == "ENDCAP"} {continue}
                 if {[$cell getType] == "CORE_SPACER"} {continue}
                 if {[$cell getType] == "CORE_TIEHIGH"} {continue}

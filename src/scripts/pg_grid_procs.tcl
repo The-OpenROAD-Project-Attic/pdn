@@ -468,11 +468,12 @@ proc generate_lower_metal_followpin_rails {tag area} {
     variable orig_stripe_locs
     variable stripe_locs
     variable row_height
+    variable rails_start_with
 
 	#Assumes horizontal stripes
 	set lay [get_rails_layer]
 
-	if {$tag == $::rails_start_with} { ;#If starting from bottom with this net, 
+	if {$tag == $rails_start_with} { ;#If starting from bottom with this net, 
 		set lly [lindex $area 1]
 	} else {
 		set lly [expr {[lindex $area 1] + $row_height}]
@@ -497,10 +498,11 @@ proc generate_upper_metal_mesh_stripes {tag layer area} {
     variable boffset
     variable orig_stripe_locs
     variable stripe_locs
-
+    variable stripes_start_with
+    
 	if {[get_dir $layer] == "hor"} {
 		set offset [expr [lindex $area 1] + $boffset($layer)]
-		if {$tag != $::stripes_start_with} { ;#If not starting from bottom with this net, 
+		if {$tag != $stripes_start_with} { ;#If not starting from bottom with this net, 
 			set offset [expr {$offset + ($pitches($layer) / 2)}]
 		}
 		for {set y $offset} {$y < [expr {[lindex $area 3] - $widths($layer)}]} {set y [expr {$pitches($layer) + $y}]} {
@@ -510,7 +512,7 @@ proc generate_upper_metal_mesh_stripes {tag layer area} {
 	} elseif {[get_dir $layer] == "ver"} {
 		set offset [expr [lindex $area 0] + $loffset($layer)]
 
-		if {$tag != $::stripes_start_with} { ;#If not starting from bottom with this net, 
+		if {$tag != $stripes_start_with} { ;#If not starting from bottom with this net, 
 			set offset [expr {$offset + ($pitches($layer) / 2)}]
 		}
 		for {set x $offset} {$x < [expr {[lindex $area 2] - $widths($layer)}]} {set x [expr {$pitches($layer) + $x}]} {
@@ -636,6 +638,7 @@ proc generate_stripes_vias {tag net_name grid_data} {
 
 	## puts "Adding stripes for $net_name ..."
 	foreach lay [dict keys [dict get $grid_data layers]] {
+	    ## puts "    Layer $lay ..."
 
 	    if {$lay == [get_rails_layer]} {
 	        #Std. cell rails
@@ -671,7 +674,7 @@ proc generate_stripes_vias {tag net_name grid_data} {
 	foreach tuple [dict get $grid_data connect] {
 		set l1 [lindex $tuple 0]
 		set l2 [lindex $tuple 1]
-
+                ## puts "    $l1 to $l2"
                 set connections [generate_via_stacks $l1 $l2 $tag $grid_data]
 		lappend vias [list net_name $net_name connections $connections]
 	}
